@@ -1,0 +1,9 @@
+{
+  "name": "Index Time Tracker",
+  "short_name": "Time Tracker",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F2F4F6",
+  "theme_color": "#17202A",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

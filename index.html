@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Index Time Tracker</title>
+<meta name="theme-color" content="#17202A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="banner" id="gap" role="alert" hidden>
+    <p id="gapText"></p>
+    <button class="btn" id="gapKeep" type="button">Keep the time</button>
+    <button class="btn" id="gapTake" type="button" hidden></button>
+    <button class="btn ghost" id="gapStop" type="button"></button>
+  </div>
+
+  <section class="dash">
+    <div class="stat"><span>Today</span><b id="dDay">0:00</b><small id="dDayS">&nbsp;</small></div>
+    <div class="stat"><span>This week</span><b id="dWeek">0:00</b><small id="dWeekS">&nbsp;</small></div>
+    <div class="stat"><span>This month</span><b id="dMonth">0:00</b><small id="dMonthS">&nbsp;</small></div>
+    <button class="break" id="breakBtn" disabled>BREAK<small>Start a clock first</small></button>
+  </section>
+
+  <div class="board" id="board"></div>
+
+  <form class="foot" id="addForm">
+    <input id="newName" placeholder="New project name" aria-label="New project name" autocomplete="off">
+    <button class="btn primary" type="submit">Create project</button>
+  </form>
+
+  <!-- Reports -->
+  <section class="card report">
+    <div class="card-top">
+      <h2>Reports</h2>
+      <button class="btn" id="exportBtn" type="button" data-menu="export|" aria-haspopup="menu"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>Export report<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Report">
+      <button type="button" role="tab" data-tab="worked" aria-selected="true">Worked hours</button>
+      <button type="button" role="tab" data-tab="project" aria-selected="false">Project time</button>
+      <button type="button" role="tab" data-tab="closed" aria-selected="false">Closed projects <span class="count" id="closedCount" hidden></span></button>
+    </div>
+    <div class="filter" id="filter">
+      <div class="stepper" id="stepper">
+        <button type="button" id="prev" aria-label="Earlier"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div class="range" id="rangeText" aria-live="polite"></div>
+        <button type="button" id="next" aria-label="Later"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+      <span id="custom" class="custom" hidden>
+        <input type="date" id="from" aria-label="From"><span>to</span><input type="date" id="to" aria-label="To">
+      </span>
+      <div class="seg" id="unit" role="group" aria-label="Period">
+        <button type="button" data-unit="week">Week</button>
+        <button type="button" data-unit="month">Month</button>
+        <button type="button" data-unit="year">Year</button>
+        <button type="button" data-unit="all">All</button>
+        <button type="button" data-unit="custom">Custom…</button>
+      </div>
+    </div>
+    <div id="summary" role="tabpanel"></div>
+  </section>
+
+  <!-- Time entries -->
+  <section class="card entries">
+    <div class="card-top">
+      <h2>Time entries <small id="logCount"></small></h2>
+      <button class="btn primary" id="addToggle" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add time</button>
+    </div>
+    <form class="addpanel" id="addTime" hidden>
+      <label>Project<select name="p"></select></label>
+      <label>Activity<select name="a"></select></label>
+      <label>Date<input type="date" name="d" required></label>
+      <label>Start<input type="time" name="s" required></label>
+      <label>End<input type="time" name="e" required></label>
+      <label class="wide">Note<input name="note" placeholder="What did you do? e.g. ch. 52-54" maxlength="200" autocomplete="off"></label>
+      <div class="fbtns"><button class="btn ghost" id="addCancel" type="button">Cancel</button><button class="btn primary" type="submit">Add</button></div>
+    </form>
+    <div id="log"></div>
+  </section>
+
+  <!-- Extras: invoices and notes, off unless turned on -->
+  <section class="card safe" id="extras"></section>
+
+  <!-- Keep your time safe -->
+  <section class="card safe" id="safe"></section>
+  <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+  <p class="privacy"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Your time stays on this computer. It is never sent anywhere.</p>
+</div>
+
+<div class="menu" id="menu" role="menu" hidden></div>
+<dialog id="closedDlg" class="dlg" aria-labelledby="closedTitle">
+  <h2 id="closedTitle"></h2>
+  <pre id="closedText"></pre>
+  <p id="closedMsg" class="msg"></p>
+  <div class="dlgbtns">
+    <button class="btn" id="closedCopy" type="button">Copy again</button>
+    <button class="btn primary" id="closedDone" type="button">Done</button>
+  </div>
+</dialog>
+<form class="notebar" id="noteBar" hidden>
+  <div class="nb-txt"><b>What did you do?</b> <span id="noteWhat"></span></div>
+  <input id="noteInput" list="noteList" placeholder="e.g. ch. 52-54, or Pauly training" maxlength="200" autocomplete="off" aria-label="Note for this time">
+  <datalist id="noteList"></datalist>
+  <button class="btn primary" type="submit">Save note</button>
+  <button class="btn ghost" type="button" id="noteSkip">Skip</button>
+</form>
+<dialog id="invDlg" class="dlg inv" aria-labelledby="invTitle">
+  <div class="dlg-top"><h2 id="invTitle">Invoice</h2><button class="btn icon" id="invX" type="button" aria-label="Close">✕</button></div>
+  <div id="invBody"></div>
+</dialog>
+<div id="toast" class="toast" hidden></div>
+<script src="reports.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
