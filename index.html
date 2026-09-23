@@ -21,6 +21,14 @@
     <button class="btn ghost" id="gapStop" type="button"></button>
   </div>
 
+  <nav class="views" role="tablist" aria-label="Show">
+    <button type="button" role="tab" data-view="clocks" aria-selected="true">Clocks<span class="run" id="navRun" hidden></span></button>
+    <button type="button" role="tab" data-view="reports" aria-selected="false">Reports</button>
+    <button type="button" role="tab" data-view="settings" aria-selected="false">Settings<span class="warn" id="safeDot" title="Something in Keep your time safe is off" hidden></span></button>
+    <button type="button" class="btn" id="miniBtn" title="A small window that stays on top of your other windows" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="12" y="11" width="7" height="7" rx="1"/></svg><span>Mini tracker</span></button>
+  </nav>
+
+  <div class="pane" data-pane="clocks">
   <section class="dash">
     <div class="stat"><span>Today</span><b id="dDay">0:00</b><small id="dDayS">&nbsp;</small></div>
     <div class="stat"><span>This week</span><b id="dWeek">0:00</b><small id="dWeekS">&nbsp;</small></div>
@@ -30,10 +38,17 @@
 
   <div class="board" id="board"></div>
 
-  <form class="foot" id="addForm">
-    <input id="newName" placeholder="New project name" aria-label="New project name" autocomplete="off">
-    <button class="btn primary" type="submit">Create project</button>
-  </form>
+  <div class="foot">
+    <button class="btn ghost" id="addOpen" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New project</button>
+    <form id="addForm" hidden>
+      <input id="newName" placeholder="New project name" aria-label="New project name" autocomplete="off">
+      <button class="btn primary" type="submit">Create project</button>
+      <button class="btn ghost" id="addClose" type="button">Cancel</button>
+    </form>
+  </div>
+  </div>
+
+  <div class="pane" data-pane="reports" hidden>
 
   <!-- Reports -->
   <section class="card report">
@@ -84,13 +99,17 @@
     <div id="log"></div>
   </section>
 
-  <!-- Extras: invoices and notes, off unless turned on -->
-  <section class="card safe" id="extras"></section>
+  </div>
 
+  <div class="pane" data-pane="settings" hidden>
   <!-- Keep your time safe -->
   <section class="card safe" id="safe"></section>
+
+  <!-- Extras: invoices and notes, off unless turned on -->
+  <section class="card safe" id="extras"></section>
   <input type="file" id="restoreFile" accept=".json,application/json" hidden>
   <p class="privacy"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Your time stays on this computer. It is never sent anywhere.</p>
+  </div>
 </div>
 
 <div class="menu" id="menu" role="menu" hidden></div>

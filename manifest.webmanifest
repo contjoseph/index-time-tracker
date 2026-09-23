@@ -5,5 +5,10 @@
   "display": "standalone",
   "background_color": "#F2F4F6",
   "theme_color": "#17202A",
-  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
+  "launch_handler": {"client_mode": "focus-existing"},
+  "shortcuts": [
+    {"name": "Break / End break", "short_name": "Break", "url": "./?do=break", "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}]},
+    {"name": "Stop all clocks", "short_name": "Stop all", "url": "./?do=stop", "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}]}
+  ]
 }

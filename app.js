@@ -107,6 +107,7 @@ const I = {
   file: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 13l2 2 4-4"/>'),
   user: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
   bell: svg('<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'),
+  sound: svg('<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
   box: svg('<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>'),
   shield: svg('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
@@ -185,6 +186,14 @@ function toggleBreak() {
     S.running = []; S.breakStart = t;
   }
   save(); render();
+}
+function stopAll() {   // from the taskbar's right-click menu
+  const t = now(), n = S.running.length + S.paused.length;
+  if (!n) { toast("No clocks are running"); return; }
+  const stopped = S.running.map(r => record(r, t)).filter(Boolean);
+  S.running = []; S.paused = []; S.breakStart = null;
+  save(); render(); toast(`Stopped ${n} clock${n === 1 ? "" : "s"}`);
+  if (stopped.length === 1 && opt("notes")) askNote(stopped[0]);
 }
 function addProject(name) {
   name = name.trim();
@@ -270,7 +279,7 @@ function heartbeat() {
   lsSet(SEEN, t);
   beat = t;
 }
-function settle() { gap = null; lsSet(AWAYK, null); lsSet(CHECKK, now()); }
+function settle() { gap = null; lsSet(AWAYK, null); lsSet(CHECKK, now()); clearAlert(); }
 function keepGap() { settle(); tick(); }
 function stopAtGap() {
   const at = gap.kind === "check" ? gap.at : gap.from;
@@ -284,9 +293,53 @@ function takeOutAway() {   // count up to when you left, then carry on from when
   S.running = S.running.map(r => ({...r, start: Math.max(r.start, until)}));
   settle(); save(); render(); toast(`Took out ${fmt(until - from)} away`);
 }
-function notify(title, body) {   // a Windows pop-up, for when the tracker is behind other windows
-  if (!("Notification" in window) || Notification.permission !== "granted" || document.hasFocus()) return;
-  try { const n = new Notification(title, {body, icon: "icon.svg", tag: "itt"}); n.onclick = () => { window.focus(); n.close(); }; } catch {}
+// Asking out loud: a chime, a Windows pop-up that stays until clicked, and a blinking tab title.
+// Repeats every few minutes until the question is answered, so it's hard to miss.
+const SOUNDK = KEY + ":sound", NAG = 5 * 60000;
+const canPop = "Notification" in window;
+const soundOn = () => lsGet(SOUNDK) !== "0";
+let actx = null, popup = null, asking = null, askedAt = 0;
+function unlockSound() {   // browsers allow sound only after a click on the page, so get it ready on the first one
+  try { if (!actx) actx = new AudioContext(); if (actx.state === "suspended") actx.resume(); } catch {}
+}
+function chime() {   // a soft two-note "ding-dong"; returns true if it played
+  if (!soundOn() || !actx || actx.state !== "running") return false;
+  const t0 = actx.currentTime;
+  [[659.25, 0], [523.25, 0.4]].forEach(([hz, d]) => {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = "sine"; o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, t0 + d);
+    g.gain.exponentialRampToValueAtTime(0.4, t0 + d + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 1.4);
+    o.connect(g).connect(actx.destination); o.start(t0 + d); o.stop(t0 + d + 1.5);
+  });
+  return true;
+}
+function popUp(title, body, rang) {   // rang: our chime played, so Windows needn't add its own sound
+  if (!canPop || Notification.permission !== "granted") return;
+  try {
+    if (popup) popup.close();
+    popup = new Notification(title, {body, icon: "icon.svg", tag: "itt", renotify: true, requireInteraction: true, silent: rang || !soundOn()});
+    popup.onclick = () => { window.focus(); if (popup) popup.close(); };
+  } catch {}
+}
+function notify(title, body) {
+  asking = [title, body]; askedAt = now();
+  const rang = chime();
+  if (!document.hasFocus() || document.hidden) popUp(title, body, rang);   // no pop-up if you're already looking at the tracker
+}
+function clearAlert() { asking = null; if (popup) { popup.close(); popup = null; } }
+async function turnOnPopups() {
+  unlockSound();
+  const p = canPop ? await Notification.requestPermission().catch(() => "denied") : "denied";
+  renderSafe();
+  if (p !== "granted") { toast("Pop-ups need your OK. Click the lock icon by the address bar and allow notifications."); return; }
+  testAlert();
+}
+function testAlert() {
+  unlockSound();
+  setTimeout(() => popUp("Index Time Tracker", "This is how the tracker will ask if you're still working.", chime()), 150);
+  toast(soundOn() ? "You should hear a chime and see a pop-up" : "You should see a pop-up (sound is off)");
 }
 const checkEvery = () => { const v = lsGet(EVERYK); return v == null ? 2 * 3600000 : +v; };
 function checkStillWorking(t) {
@@ -438,6 +491,23 @@ function tick() {
   if (S.running.length && t - lastReport > 60000) renderReport();
   document.title = S.breakStart ? "On break · Index Time Tracker"
     : S.running.length ? `${fmt(worked(b.day, iv))} today · Index Time Tracker` : "Index Time Tracker";
+  // A question waiting: blink the tab title, and ask again every few minutes
+  if (!gap && asking) clearAlert();
+  if (gap && Math.floor(t / 1000) % 2) document.title = gap.kind === "check" ? "🔔 Still working?" : "🔔 Check your time";
+  if (gap && asking && t - askedAt >= NAG) notify(...asking);
+  const nr = $("#navRun");
+  nr.hidden = !S.running.length && !S.breakStart;
+  nr.className = S.breakStart ? "run brk" : "run";
+  nr.textContent = S.breakStart ? "On break" : fmt(worked(b.day, iv));
+  renderMini(t, iv, b);
+  badge(gap ? (Math.floor(t / 1000) % 2 ? S.running.length : 0) : S.breakStart ? "dot" : S.running.length);
+}
+// The installed app's taskbar icon: the number of running clocks, a dot on break, blinking while a question waits
+let lastBadge = null;
+function badge(b) {
+  if (b === lastBadge || !navigator.setAppBadge) return;
+  lastBadge = b;
+  (b === "dot" ? navigator.setAppBadge() : b ? navigator.setAppBadge(b) : navigator.clearAppBadge()).catch(() => {});
 }
 setInterval(tick, 1000);
 
@@ -973,6 +1043,72 @@ async function reconnectFile() {
   renderSafe(); if (fileOK) writeFile();
 }
 
+/* ---------- mini tracker: a small window that stays on top of other windows (Chrome and Edge) ---------- */
+// It lives only while the main window is open (minimised is fine). It uses the main window's code and styles.
+const canMini = "documentPictureInPicture" in window;
+let mini = null;
+const STOP = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+async function toggleMini() {
+  if (mini) { mini.close(); return; }
+  try { mini = await documentPictureInPicture.requestWindow({width: 300, height: 330}); }
+  catch { toast("The mini tracker couldn't open"); return; }
+  const d = mini.document;
+  for (const n of document.querySelectorAll('link[rel="stylesheet"]')) { const l = d.createElement("link"); l.rel = "stylesheet"; l.href = n.href; d.head.appendChild(l); }
+  d.title = "Time Tracker";
+  d.body.className = "mini";
+  d.body.innerHTML = `<div id="m"></div>`;
+  d.addEventListener("click", miniClick);
+  d.addEventListener("pointerdown", unlockSound, true);
+  mini.addEventListener("pagehide", () => { mini = null; renderMiniBtn(); });
+  mini.setInterval(tick, 1000);   // its own timer keeps it ticking while the main window is minimised
+  renderMiniBtn(); tick();
+}
+function renderMiniBtn() {
+  const b = $("#miniBtn");
+  b.hidden = !canMini;
+  b.setAttribute("aria-pressed", !!mini);
+  b.querySelector("span").textContent = mini ? "Close mini tracker" : "Mini tracker";
+}
+function renderMini(t, iv, b) {
+  if (!mini) return;
+  const d = mini.document, box = d.getElementById("m"); if (!box) return;
+  const row = (pid, aid, cls) => {
+    const p = proj(pid), i = ACTIVITIES.findIndex(a => a.id === aid);
+    if (!p || i < 0) return "";
+    return `<button type="button" class="mrow${cls}" style="--c:var(--a${i % 7})" data-m="clock|${pid}|${aid}" ${S.breakStart ? "disabled" : ""}>
+      <span class="dot"></span><span class="mn"><b>${esc(p.name)}</b><small>${esc(ACTIVITIES[i].name)}${cls === " paused" ? " · waiting" : ""}</small></span>
+      <span class="mt" data-mt="${pid}|${aid}"></span><span class="mi">${cls === " on" ? STOP : cls === " paused" ? PAUSE : PLAY}</span></button>`;
+  };
+  // Up to 3 clocks used most recently, so you can start one without the main window
+  const last = new Map();
+  for (const e of S.entries) { const k = e.projectId + "|" + e.activityId; if (!(last.get(k) > e.end)) last.set(k, e.end); }
+  const busy = k => S.running.concat(S.paused).some(r => r.projectId + "|" + r.activityId === k);
+  const recent = [...last].filter(([k]) => { const p = proj(k.split("|")[0]); return p && !p.closed && !busy(k); })
+    .sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k]) => k.split("|"));
+  const now_ = [...S.running.map(r => row(r.projectId, r.activityId, " on")), ...S.paused.map(r => row(r.projectId, r.activityId, " paused"))].join("");
+  const ask = gap ? `<div class="banner"><p data-mg></p><button class="btn" type="button" data-m="keep">${esc($("#gapKeep").textContent)}</button>${gap.kind === "away" ? `<button class="btn" type="button" data-m="take">${esc($("#gapTake").textContent)}</button>` : ""}<button class="btn ghost" type="button" data-m="stop">${esc($("#gapStop").textContent)}</button></div>` : "";
+  const brk = S.breakStart ? `<button type="button" class="break on" data-m="break">${PLAY}END BREAK</button>`
+    : `<button type="button" class="break" data-m="break" ${S.running.length ? "" : "disabled"}>${PAUSE}BREAK</button>`;
+  setHTML(box, `${ask}<div class="mtop"><div class="mtot"><span>Today</span><b data-mtot></b></div>${brk}</div>
+    <div class="mlist">${now_}${recent.length ? `${now_ ? `<div class="mhead">Recent</div>` : ""}${recent.map(([p, a]) => row(p, a, "")).join("")}` : ""}
+    ${!now_ && !recent.length ? `<p class="mempty">Start a clock in the main window. Clocks you use show up here.</p>` : ""}</div>`);
+  const mg = d.querySelector("[data-mg]"); if (mg) mg.textContent = $("#gapText").textContent;
+  d.querySelector("[data-mtot]").textContent = fmt(worked(b.day, iv));
+  for (const el of d.querySelectorAll("[data-mt]")) {
+    const [p, a] = el.dataset.mt.split("|"), on = S.running.some(x => same(x, p, a));
+    el.textContent = fmt(clockSum(0, iv.filter(x => x.p === p && x.a === a)), on);
+  }
+}
+function miniClick(e) {
+  const el = e.target.closest("[data-m]"); if (!el || el.disabled) return;
+  const [k, p, a] = el.dataset.m.split("|");
+  if (k === "clock") toggleClock(p, a);
+  else if (k === "break") toggleBreak();
+  else if (k === "keep" && gap) keepGap();
+  else if (k === "take" && gap && gap.kind === "away") takeOutAway();
+  else if (k === "stop" && gap) stopAtGap();
+}
+
 /* ---------- "Keep your time safe" card ---------- */
 // A checklist while anything is left to set up; one calm line once everything is on.
 let safeOpen = false;
@@ -983,13 +1119,16 @@ function renderSafe() {
   const file = !canFile ? "na" : !fileH ? "off" : !fileOK ? "paused" : "on";
   const away = !canAway ? "na" : awayOn ? "on" : "off";
   const check = every ? "on" : "off";
-  const steps = [file, away, check].filter(s => s !== "na"), done = steps.filter(s => s === "on").length, allOn = done === steps.length;
+  const pops = !canPop ? "na" : Notification.permission === "granted" ? "on" : "off";
+  const steps = [file, away, check, pops].filter(s => s !== "na"), done = steps.filter(s => s === "on").length, allOn = done === steps.length;
   const lastBackup = backedUp ? dShort(backedUp) : "never";
+  $("#safeDot").hidden = allOn;
 
   if (allOn && !safeOpen) {
     const parts = [file === "on" ? `Auto-saving to ${esc(fileH.name)}` : `Save a backup now and then (last: ${lastBackup})`];
     if (away === "on") parts.push("away detection on");
     parts.push(`“Still working?” after ${every / 3600000} h`);
+    if (pops === "on") parts.push(soundOn() ? "pop-ups and sound on" : "pop-ups on, sound off");
     el.className = "card safe compact";
     el.innerHTML = `<div class="shield">${I.shield}</div>
       <p><b>Your time is protected.</b> <span class="muted">${parts.join(" · ")}</span></p>
@@ -1017,6 +1156,13 @@ function renderSafe() {
     : away === "off" ? `<button type="button" class="${main()}" data-s="away-on">Turn on</button>` : "");
   const checkItem = item(check, I.bell, "“Still working?” check", "Asks if a clock has run a long time without a break.",
     `<select id="checkEvery" aria-label="Ask Still working? after">${[1, 2, 3, 4].map(h => `<option value="${h * 3600000}"${h * 3600000 === every ? " selected" : ""}>After ${h} hour${h > 1 ? "s" : ""}</option>`).join("")}<option value="0"${every ? "" : " selected"}>Never</option></select>`);
+  const popItem = item(pops, I.sound, "Pop-ups and sound",
+    pops === "na" ? "This browser can't show pop-ups. Keep the tracker where you can see it."
+    : pops === "on" ? `A chime${soundOn() ? "" : " (off now)"} and a pop-up that stays until you answer, repeated every ${NAG / 60000} minutes.`
+    : Notification.permission === "denied" ? "Your browser is blocking them. Click the lock icon by the address bar and allow notifications."
+    : "So you don't miss “Still working?” and away questions, even with the tracker behind other windows.",
+    pops === "on" ? `<button type="button" class="btn ghost" data-s="pop-test">Test</button><button type="button" class="btn ghost" data-s="sound">${soundOn() ? "Sound off" : "Sound on"}</button>`
+    : pops === "off" ? `<button type="button" class="${main()}" data-s="pop-on">Turn on</button>` : "");
   const backupItem = item("", I.box, "Backup", `A copy you can move to another computer. Last saved: ${lastBackup}.`,
     `<button type="button" class="btn" data-s="backup">Save backup</button><label class="btn ghost" for="restoreFile">Restore</label>`);
 
@@ -1025,7 +1171,7 @@ function renderSafe() {
       <div><h2>Keep your time safe</h2><p>${allOn ? "Everything is on." : "A few one-time steps. Your time never leaves this computer."}</p></div>
       <div class="meter"><div class="track"><i style="width:${steps.length ? done / steps.length * 100 : 100}%"></i></div>${done} of ${steps.length} set up</div>
       ${allOn ? `<button type="button" class="btn ghost" data-s="close">Done</button>` : ""}
-    </div>${fileItem}${awayItem}${checkItem}${backupItem}`;
+    </div>${fileItem}${awayItem}${checkItem}${popItem}${backupItem}`;
 }
 function safeAction(a) {
   if (a === "open") { safeOpen = true; renderSafe(); }
@@ -1033,6 +1179,9 @@ function safeAction(a) {
   else if (a.startsWith("file-")) fileAction(a.slice(5));
   else if (a === "away-on") turnOnReminders();
   else if (a === "away-off") stopAway();
+  else if (a === "pop-on") turnOnPopups();
+  else if (a === "pop-test") testAlert();
+  else if (a === "sound") { lsSet(SOUNDK, soundOn() ? "0" : null); renderSafe(); if (soundOn()) testAlert(); else toast("Sound is off"); }
   else if (a === "backup") backup();
 }
 
@@ -1054,11 +1203,28 @@ $("#board").addEventListener("submit", e => {
   if (p && n) { p.name = n; save(); }
   editing = null; render();
 });
+function showAddProject(on) {
+  $("#addForm").hidden = !on; $("#addOpen").hidden = on;
+  if (on) $("#newName").focus(); else $("#newName").value = "";
+}
+$("#addOpen").addEventListener("click", () => showAddProject(true));
+$("#addClose").addEventListener("click", () => showAddProject(false));
+$("#newName").addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); showAddProject(false); } });
 $("#addForm").addEventListener("submit", e => {
   e.preventDefault();
-  if (addProject($("#newName").value)) $("#newName").value = "";
-  $("#newName").focus();
+  if (addProject($("#newName").value)) showAddProject(false); else $("#newName").focus();
 });
+
+// Views: Clocks, Reports, Settings. The tracker always opens on Clocks.
+function setView(v) {
+  document.querySelectorAll(".views [data-view]").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
+  document.querySelectorAll("[data-pane]").forEach(p => { p.hidden = p.dataset.pane !== v; });
+  closeMenu(); window.scrollTo(0, 0);
+}
+$(".views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); });
+$("#miniBtn").addEventListener("click", toggleMini);
+document.addEventListener("pointerdown", unlockSound, true);
+document.addEventListener("keydown", unlockSound, true);
 $("#breakBtn").addEventListener("click", toggleBreak);
 $("#gapKeep").addEventListener("click", () => { if (gap) keepGap(); });
 $("#gapTake").addEventListener("click", () => { if (gap && gap.kind === "away") takeOutAway(); });
@@ -1177,7 +1343,16 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------- start ---------- */
-load(); heartbeat(); render(); reconnectFile(); resumeAway();
+load(); heartbeat(); render(); renderMiniBtn(); reconnectFile(); resumeAway();
+// Right-click menu on the taskbar icon (manifest "shortcuts") opens ?do=break or ?do=stop
+function runShortcut(url) {
+  const a = new URL(url).searchParams.get("do");
+  if (a === "break") { if (S.breakStart || S.running.length) toggleBreak(); else toast("Start a clock first"); }
+  else if (a === "stop") stopAll();
+}
+if ("launchQueue" in window) launchQueue.setConsumer(p => { if (p.targetURL) runShortcut(p.targetURL); });
+else runShortcut(location.href);
+if (location.search) history.replaceState(null, "", location.pathname);
 // Ask the browser not to clear this site's storage when the disk gets full
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
