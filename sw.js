@@ -1,5 +1,5 @@
 // Lets the tracker open offline and be installed as an app.
-const CACHE = "itt-v14";
+const CACHE = "itt-v17";
 const FILES = ["./", "index.html", "style.css", "app.js", "reports.js", "manifest.webmanifest", "icon.svg",
   "lib/exceljs.min.js", "lib/jspdf.umd.min.js", "lib/jspdf.plugin.autotable.min.js"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });

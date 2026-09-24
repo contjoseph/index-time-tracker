@@ -21,7 +21,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Figtree,syste
 button,input,select{font:inherit;color:inherit}
 button,label.btn{cursor:pointer}
 :focus-visible{outline:2px solid var(--focus);outline-offset:3px}
-.wrap{max-width:1080px;margin:0 auto;padding:18px 16px 40px}
+.wrap{max-width:1080px;margin:0 auto;padding:18px 16px 18px}
 .muted{color:var(--muted)}
 .ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ic.fill{fill:currentColor;stroke:none}
@@ -72,12 +72,14 @@ button,label.btn{cursor:pointer}
 .break:disabled svg{opacity:.6}
 .break.on{--b:#2D8A6C;--bd:#1B5A46;animation:breathe 2.4s ease-in-out infinite}
 @keyframes breathe{0%,100%{box-shadow:0 4px 0 var(--bd),0 0 0 0 rgba(45,138,108,.5)}50%{box-shadow:0 4px 0 var(--bd),0 0 0 9px rgba(45,138,108,0)}}
-@media (prefers-reduced-motion:reduce){.break.on{animation:none}}
+@media (prefers-reduced-motion:reduce){.break.on{animation:none}.hand{transition:none}.xchip .xfill{animation:none;display:none}}
 
 /* ---------- clock board ---------- */
-.board{background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 0 0;overflow:hidden}
+.board{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden auto;overscroll-behavior:contain}   /* max-height set by fitBoard() */
 .row{display:grid;grid-template-columns:minmax(150px,1.3fr) repeat(var(--n),minmax(92px,1fr)) minmax(110px,1fr);align-items:center;border-top:1px solid var(--line)}
-.row.head{border-top:0;background:var(--soft);font-size:15px;font-weight:800;color:var(--ink)}
+.row.head{border-top:0;background:var(--soft);font-size:15px;font-weight:800;color:var(--ink);position:sticky;top:0;z-index:1}
+.row.head .hp{display:flex;align-items:center;gap:8px}
+.row.head .addp{padding:2px 8px;font-size:13px;font-weight:700;border-radius:7px;color:var(--muted)}
 .row.head .ah{color:var(--c)}
 .row.head > div{padding:8px 6px;text-align:center;line-height:1.2}
 .row.head > div:first-child{text-align:left;padding-left:var(--pad)}
@@ -88,14 +90,23 @@ button,label.btn{cursor:pointer}
 .pn .more{flex:none;opacity:.7}
 .pn .more:hover,.pn .more:focus-visible{opacity:1}
 .pn .edit{display:flex;gap:6px;flex-wrap:wrap}
-.pn .edit input{flex:1;min-width:100px;border:1px solid var(--line);border-radius:7px;padding:4px 8px;background:var(--surface)}
-.clk{border:0;background:none;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--ink)}
+.pn .edit label{flex:1 1 100%;display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.pn .edit label span{font-weight:500}
+.pn .edit input{flex:1 1 100%;min-width:100px;border:1px solid var(--line);border-radius:7px;padding:4px 8px;background:var(--surface);color:var(--ink);font-size:14px;font-weight:500}
+.clk{border:0;background:none;padding:7px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink)}
 .clk:disabled{cursor:not-allowed}
-.face{width:44px;height:44px}
+.face{width:64px;height:64px}
 .face svg{width:100%;height:100%;display:block}
 .rim{fill:var(--surface);stroke:var(--line);stroke-width:3}
 .tick{stroke:var(--line);stroke-width:2}
-.hand{stroke:var(--c);stroke-width:2.5;stroke-linecap:round;transform-origin:40px 40px}
+.hand{stroke:var(--c);stroke-width:2.5;stroke-linecap:round;transform-origin:40px 40px;transition:transform 1s linear}
+/* hour wedges: one twelfth of the face per full hour */
+.hrs .w{fill:var(--c);opacity:.28}
+.hrs .lap{fill:var(--c);opacity:.12}
+.clk.on .hrs .w{fill:#fff;opacity:.32}
+.clk.on .hrs .lap{fill:#fff;opacity:.14}
+.tot .hrs .w{fill:var(--surface);opacity:.3}
+.tot .hrs .lap{fill:var(--surface);opacity:.14}
 .hub{fill:var(--c)}
 .clk:hover:not(:disabled) .rim{stroke:var(--c)}
 .clk.on .rim{fill:var(--c);stroke:var(--c)}
@@ -107,16 +118,16 @@ button,label.btn{cursor:pointer}
 .clk.on .t{color:var(--c)}
 .lab{display:none;font-size:12px;color:var(--muted);font-weight:600}
 .clk .lab{color:var(--c);font-weight:800;font-size:13px}
-.tot{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 12px 6px 4px}
+.tot{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 12px 7px 4px}
 .tot .rim{fill:var(--ink);stroke:var(--ink)}
 .tot .tick{stroke:rgba(127,127,127,.6)}
 .tot .hand{stroke:var(--surface)}
 .tot .hub{fill:var(--surface)}
 .tot .t{font-weight:800;font-size:15px}
 .empty{padding:28px var(--pad);text-align:center;color:var(--muted);margin:0}
-.foot{display:flex;gap:8px;padding:6px var(--pad);border:1px solid var(--line);border-top:0;border-radius:0 0 14px 14px;background:var(--soft);flex-wrap:wrap}
-.foot form{display:flex;gap:8px;flex:1;flex-wrap:wrap}
-.foot input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:var(--surface)}
+.addbar{display:flex;gap:8px;padding:10px var(--pad);border:1px solid var(--line);border-radius:14px;background:var(--surface);flex-wrap:wrap;margin-bottom:10px}
+.addbar input.short{flex:0 1 190px;min-width:150px}
+.addbar input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:var(--surface)}
 
 /* ---------- cards ---------- */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin-top:18px}
@@ -322,7 +333,8 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
   .stat b{font-size:24px}
   .stat{padding:10px 12px}
   .row{grid-template-columns:repeat(3,1fr)}
-  .row.head{display:none}
+  .row.head{grid-template-columns:1fr}
+  .row.head > div:not(:first-child){display:none}
   .pn{grid-column:1/-1;padding-bottom:0}
   .lab{display:block}
   .tot{padding:10px 4px}
@@ -344,32 +356,42 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
   .item .pill{grid-column:2;justify-self:start}
 }
 
-/* ---------- mini tracker (a small always-on-top window; Chrome and Edge) ---------- */
-body.mini{padding:10px;min-width:0}
-.mini .mtop{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.mini .mtot{flex:1;min-width:0}
-.mini .mtot span{display:block;font-size:12px;font-weight:700;color:var(--muted)}
-.mini .mtot b{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
-.mini .break{min-height:0;padding:9px 14px;font-size:16px;margin:0 0 4px;border-radius:11px;flex-direction:row;gap:8px}
-.mini .break svg{width:16px;height:16px}
-.mini .banner{border-radius:11px;padding:9px 10px;margin:0 0 8px;font-size:13px;gap:6px}
-.mini .banner p{flex-basis:100%}
-.mini .banner .btn{font-size:13px;padding:4px 9px}
-.mini .mlist{background:var(--surface);border:1px solid var(--line);border-radius:11px;overflow:hidden}
-.mini .mrow{display:flex;align-items:center;gap:9px;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:7px 10px;text-align:left}
-.mini .mrow:first-child{border-top:0}
-.mini .mrow:hover:not(:disabled){background:var(--soft)}
-.mini .mrow .dot{width:10px;height:10px}
-.mini .mrow .mn{flex:1;min-width:0;line-height:1.25}
-.mini .mrow .mn b{display:block;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mini .mrow .mn small{font-size:12px;color:var(--muted)}
-.mini .mrow .mt{font-weight:800;font-size:14px}
-.mini .mrow .mi{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--ink);flex:none}
-.mini .mrow .mi svg{width:12px;height:12px;fill:currentColor}
-.mini .mrow.on .mi{background:var(--c);color:#fff}
-.mini .mrow.on .mt{color:var(--c)}
-.mini .mhead{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:6px 10px 2px;border-top:1px solid var(--line)}
-.mini .mhead:first-child{border-top:0}
-.mini .mempty{padding:10px;color:var(--muted);font-size:13px;margin:0}
-.mini .mrow:disabled{cursor:default}
-.mini .mrow.paused .mi{background:none;color:var(--brk)}
+/* ---------- mini tracker: one small strip that stays on top of other windows (Chrome and Edge) ---------- */
+body.mini{padding:0;min-width:0;overflow:hidden;background:var(--surface)}
+.strip{display:flex;align-items:center;gap:9px;height:100vh;padding:0 8px 0 12px}
+.strip .sdot{width:10px;height:10px;border-radius:50%;background:var(--line);flex:none}
+.strip .sdot.on{background:var(--c,var(--ok));animation:breathe-dot 2s ease-in-out infinite}
+@keyframes breathe-dot{50%{opacity:.45}}
+.strip .stime{flex:1;min-width:0;line-height:1.1}
+.strip .stime b{display:block;font-size:22px;font-weight:800;letter-spacing:-.02em}
+.strip .stime small{display:block;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip.brk .stime small{color:var(--ok)}
+.sbtn{border:0;border-radius:9px;background:var(--brk);color:#fff;font-weight:800;font-size:13px;padding:7px 10px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex:none}
+.sbtn svg{width:12px;height:12px;fill:currentColor}
+.sbtn:hover:not(:disabled){filter:brightness(1.1)}
+.sbtn:disabled{background:var(--soft);color:var(--muted);cursor:default}
+.sbtn.go{background:var(--ok)}
+.strip.ask{background:var(--brk);color:#fff;gap:6px}
+.strip.ask p{margin:0;flex:1;min-width:0;font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip.ask .sbtn{background:#fff;color:#17202A}
+.strip.ask .sbtn.ghost{background:transparent;color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.8)}
+@media (prefers-reduced-motion:reduce){.strip .sdot.on{animation:none}}
+
+/* ---------- Embed chip: a rare clock under the book's name ---------- */
+.xchip{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;margin-top:6px;border:1.5px solid color-mix(in srgb,var(--c) 55%,var(--line));background:var(--surface);color:var(--ink);border-radius:999px;padding:3px 11px 3px 4px;font-size:12.5px;font-weight:700;white-space:nowrap;line-height:1.2}
+.xchip:hover:not(:disabled){border-color:var(--c)}
+.xchip:disabled{cursor:not-allowed}
+.xchip > :not(.xfill){position:relative}
+.xchip .xn{color:var(--c)}
+.xchip .xf{width:20px;height:20px;display:block}
+.xchip .xf .rim{fill:var(--surface);stroke:var(--c);stroke-width:5}
+.xchip .xf .hand{stroke:var(--c);stroke-width:6}
+.xchip .xf .hub{fill:var(--c)}
+.xchip.on{background:var(--c);border-color:var(--c);color:#fff}
+.xchip.on .xn{color:#fff}
+.xchip.on .xf .rim{fill:rgba(255,255,255,.22);stroke:#fff}
+.xchip.on .xf .hand{stroke:#fff}.xchip.on .xf .hub{fill:#fff}
+.xchip.paused{border-style:dashed;border-color:var(--brk)}
+/* fills from empty to full over each minute while running */
+.xchip .xfill{position:absolute;inset:0;background:rgba(255,255,255,.26);transform-origin:left center;animation:xminute 60s linear infinite}
+@keyframes xminute{from{transform:scaleX(0)}to{transform:scaleX(1)}}

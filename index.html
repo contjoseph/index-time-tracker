@@ -36,16 +36,13 @@
     <button class="break" id="breakBtn" disabled>BREAK<small>Start a clock first</small></button>
   </section>
 
+  <form class="addbar" id="addForm" hidden>
+    <input id="newName" placeholder="New project name" aria-label="New project name" autocomplete="off">
+    <input id="newShort" class="short" placeholder="Short name (optional)" maxlength="18" aria-label="Short name for the Clocks tab (optional)" autocomplete="off">
+    <button class="btn primary" type="submit">Create project</button>
+    <button class="btn ghost" id="addClose" type="button">Cancel</button>
+  </form>
   <div class="board" id="board"></div>
-
-  <div class="foot">
-    <button class="btn ghost" id="addOpen" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New project</button>
-    <form id="addForm" hidden>
-      <input id="newName" placeholder="New project name" aria-label="New project name" autocomplete="off">
-      <button class="btn primary" type="submit">Create project</button>
-      <button class="btn ghost" id="addClose" type="button">Cancel</button>
-    </form>
-  </div>
   </div>
 
   <div class="pane" data-pane="reports" hidden>

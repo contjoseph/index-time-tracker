@@ -9,8 +9,11 @@ const ACTIVITIES = [
   {id: "mr",   name: "Detailing (MR)", short: "MR"},
   {id: "cal",  name: "Calibration", short: "Cal"},
   {id: "fa",   name: "Final Assembly", short: "FA"},
-  {id: "edit", name: "Editing", short: "Edit"}
+  {id: "edit", name: "Editing", short: "Edit"},
+  // Rare: only books that need it get this clock (a chip under the name), added from the book's ⋯ menu
+  {id: "embed", name: "Embedding", short: "Embed", rare: true}
 ];
+const MAIN = ACTIVITIES.filter(a => !a.rare);   // the five clocks every book has
 
 const $ = s => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -72,6 +75,9 @@ function parseDT(date, time) {  // "2026-09-22", "14:05" → timestamp
   return y && m && d && !isNaN(h) && !isNaN(mi) ? new Date(y, m - 1, d, h, mi).getTime() : NaN;
 }
 const proj = id => S.projects.find(p => p.id === id);
+const shortName = p => p.short || p.name;        // the Clocks tab uses the short name; everything else the full one
+const hasExtra = (p, id) => (p.extras || []).includes(id) || S.entries.some(e => e.projectId === p.id && e.activityId === id)
+  || S.running.concat(S.paused).some(r => r.projectId === p.id && r.activityId === id);
 const actName = id => (ACTIVITIES.find(a => a.id === id) || {}).name || id;
 const actColor = id => `var(--a${Math.max(0, ACTIVITIES.findIndex(a => a.id === id)) % 7})`;
 
@@ -111,6 +117,7 @@ const I = {
   box: svg('<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>'),
   shield: svg('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
   receipt: svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>'),
   sheet: svg('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16M10 3v18"/>'),
@@ -195,12 +202,12 @@ function stopAll() {   // from the taskbar's right-click menu
   save(); render(); toast(`Stopped ${n} clock${n === 1 ? "" : "s"}`);
   if (stopped.length === 1 && opt("notes")) askNote(stopped[0]);
 }
-function addProject(name) {
-  name = name.trim();
+function addProject(name, short = "") {
+  name = name.trim(); short = short.trim();
   if (!name) { toast("Type a project name first"); return false; }
   const clash = S.projects.find(p => p.name.toLowerCase() === name.toLowerCase());
   if (clash) { toast(clash.closed ? "A closed project has that name. Reopen it from the Closed projects tab." : "That project already exists"); return false; }
-  S.projects.push({id: uid(), name, created: now()});
+  S.projects.push({id: uid(), name, created: now(), ...(short && short !== name ? {short} : {})});
   save(); render(); return true;
 }
 function startRename(id) {
@@ -418,35 +425,96 @@ const TICKS = Array.from({length: 12}, (_, i) => {
   const a = i * Math.PI / 6, r1 = i % 3 ? 30 : 27;
   return `<line class="tick" x1="${(40 + r1 * Math.sin(a)).toFixed(2)}" y1="${(40 - r1 * Math.cos(a)).toFixed(2)}" x2="${(40 + 33 * Math.sin(a)).toFixed(2)}" y2="${(40 - 33 * Math.cos(a)).toFixed(2)}"/>`;
 }).join("");
-const angle = ms => (ms / 10000) % 360;   // hand makes one full turn per hour
-const face = (ms, key) => `<div class="face"><svg viewBox="0 0 80 80" aria-hidden="true"><circle class="rim" cx="40" cy="40" r="36"/>${TICKS}<line class="hand" data-hand="${key}" x1="40" y1="40" x2="40" y2="14" style="transform:rotate(${angle(ms)}deg)"/><circle class="hub" cx="40" cy="40" r="3.5"/></svg></div>`;
+// The hand is a minute hand: one full turn per hour, starting at 12. It isn't wrapped at 360°, so it can glide
+// forward smoothly (a CSS transition) without spinning backwards at the top of the hour.
+const angle = ms => ms / 10000;
+// Each full hour colors in one twelfth of the face. After 12 hours the face keeps a light fill, and the next hours
+// color in again on top. Changes once an hour, so it costs next to nothing.
+const HOUR = 3600000;
+function wedges(ms) {
+  const h = Math.floor(ms / HOUR), cur = h % 12;
+  let out = h >= 12 ? `<circle class="lap" cx="40" cy="40" r="34"/>` : "";
+  if (cur) {
+    const a = cur * Math.PI / 6, x = (40 + 34 * Math.sin(a)).toFixed(2), y = (40 - 34 * Math.cos(a)).toFixed(2);
+    out += `<path class="w" d="M40 40 L40 6 A34 34 0 ${cur > 6 ? 1 : 0} 1 ${x} ${y} Z"/>`;
+  }
+  return out;
+}
+const face = (ms, key) => `<div class="face"><svg viewBox="0 0 80 80" aria-hidden="true"><circle class="rim" cx="40" cy="40" r="36"/><g class="hrs" data-hrs="${key}" data-h="${Math.floor(ms / HOUR)}">${wedges(ms)}</g>${TICKS}<line class="hand" data-hand="${key}" x1="40" y1="40" x2="40" y2="14" style="transform:rotate(${angle(ms)}deg)"/><circle class="hub" cx="40" cy="40" r="3.5"/></svg></div>`;
+// The small face on the Embed chip, and its 60-second fill (a CSS animation, started at the right second)
+const chipFace = (ms, key) => `<svg class="xf" viewBox="0 0 80 80" aria-hidden="true"><circle class="rim" cx="40" cy="40" r="34"/><line class="hand" data-hand="${key}" x1="40" y1="40" x2="40" y2="16" style="transform:rotate(${angle(ms)}deg)"/><circle class="hub" cx="40" cy="40" r="6"/></svg>`;
+
+/* ---------- fitting the Clocks view to your projects ---------- */
+// The board shows up to 5 projects, then scrolls (the heading row stays put). It's never taller than the screen.
+// The installed app's window then fits itself around the page, but only when it opens and when the number of
+// projects changes, so it doesn't jump about while you work or fight you when you size it yourself.
+const FIT_ROWS = 5;
+let fitCount = -1;
+const clocksShown = () => !$('[data-pane="clocks"]').hidden;
+function fitBoard() {
+  const bd = $("#board");
+  bd.style.maxHeight = "";
+  if (!clocksShown() || innerWidth <= 760) return;   // narrow windows and phones scroll the page instead
+  const head = bd.querySelector(".row.head"), rows = [...bd.querySelectorAll(".row:not(.head)")];
+  if (!rows.length) return;
+  const want = (head ? head.offsetHeight : 0) + rows.slice(0, FIT_ROWS).reduce((s, r) => s + r.offsetHeight, 0) + 2;
+  const rest = $(".wrap").offsetHeight - bd.offsetHeight;                   // everything on the page but the board
+  const room = screen.availHeight - (outerHeight - innerHeight) - rest;    // what fits on this screen
+  const max = Math.max(160, Math.min(want, room));
+  if (max < bd.scrollHeight) bd.style.maxHeight = max + "px";
+}
+let fitUntil = 0, frameH = 0, resizedAt = 0;
+function fitWindow() {   // fits now, and again if the page settles to a new height within 3 s (the font arriving, say)
+  fitUntil = now() + 3000;
+  requestAnimationFrame(fitNow);
+}
+if ("ResizeObserver" in window) new ResizeObserver(() => { if (now() < fitUntil) fitNow(); }).observe($(".wrap"));
+function fitNow() {
+  if (!matchMedia("(display-mode: standalone)").matches || !clocksShown()) return;     // only the installed app
+  if (outerWidth >= screen.availWidth - 8 && outerHeight >= screen.availHeight - 8) return;   // maximised: leave it
+  fitBoard();
+  // The title bar's height, measured only when no resize of ours is under way (sizes lag for a moment after one)
+  if (!frameH || now() - resizedAt > 600) frameH = outerHeight - innerHeight;
+  const h = frameH + $(".wrap").offsetHeight;
+  if (Math.abs(h - outerHeight) > 1) { resizedAt = now(); try { resizeTo(outerWidth, h); } catch {} }
+}
 
 /* ---------- render ---------- */
 function render() {
   closeMenu();
   const iv = intervals();
-  let h = `<div class="row head" style="--n:${ACTIVITIES.length}"><div>Project</div>${ACTIVITIES.map((a, i) => `<div class="ah" style="--c:var(--a${i % 7})">${esc(a.name)}</div>`).join("")}<div>Project total</div></div>`;
-  if (!openProjects().length) h += `<div class="empty">${S.projects.length ? "All your projects are closed. Create a new one below." : "Create your first project below, then click any clock to start tracking."}</div>`;
+  let h = `<div class="row head" style="--n:${MAIN.length}"><div class="hp">Project<button type="button" class="btn ghost addp" data-add="1" title="Create a new project">+ New</button></div>${MAIN.map((a, i) => `<div class="ah" style="--c:var(--a${i % 7})">${esc(a.name)}</div>`).join("")}<div>Project total</div></div>`;
+  if (!openProjects().length) h += `<div class="empty">${S.projects.length ? "All your projects are closed. Click <b>+ New</b> to create one." : "Click <b>+ New</b> to create your first project, then click any clock to start tracking."}</div>`;
   for (const p of openProjects()) {
     const mine = iv.filter(x => x.p === p.id);
     const anyOn = S.running.some(r => r.projectId === p.id);
     const name = editing === p.id
-      ? `<form class="edit" data-rename="${p.id}"><input name="n" value="${esc(p.name)}" aria-label="Project name">
+      ? `<form class="edit" data-rename="${p.id}"><label>Full name<input name="n" value="${esc(p.name)}" placeholder="Full name"></label>
+          <label>Short name <span>(optional, for this tab)</span><input name="s" value="${esc(p.short || "")}" maxlength="18" placeholder="e.g. SleepOUP"></label>
           <button class="btn small primary" type="submit">Save</button>
           <button type="button" class="btn small ghost" data-cancel="1">Cancel</button></form>`
-      : `<div class="pnrow"><button type="button" class="name" data-edit="${p.id}" title="Rename">${esc(p.name)}</button>
+      : `<div class="pnrow"><button type="button" class="name" data-edit="${p.id}" title="${esc(p.name)}${p.short ? "" : " (click to rename)"}">${esc(shortName(p))}</button>
          <button type="button" class="btn icon more" data-menu="project|${p.id}" aria-haspopup="menu" aria-label="More for ${esc(p.name)}" title="Rename, close or delete">${I.more}</button></div>`;
-    const clocks = ACTIVITIES.map((a, i) => {
+    const clocks = MAIN.map((a, i) => {
       const ms = clockSum(0, mine.filter(x => x.a === a.id));
       const on = S.running.some(x => same(x, p.id, a.id)), pz = S.paused.some(x => same(x, p.id, a.id));
       return `<button type="button" class="clk${on ? " on" : ""}${pz ? " paused" : ""}" style="--c:var(--a${i % 7})" data-clock="${p.id}|${a.id}" ${S.breakStart ? "disabled" : ""} aria-pressed="${on}" aria-label="${on ? "Stop" : "Start"} ${esc(a.name)} on ${esc(p.name)}">
         ${face(ms, p.id + "|" + a.id)}<span class="lab">${esc(a.short)}</span><span class="t" data-t="${p.id}|${a.id}">${fmt(ms, on)}</span></button>`;
     }).join("");
+    // Rare clocks (Embedding) sit under the name, only on books that have them
+    const chips = editing === p.id ? "" : ACTIVITIES.filter(a => a.rare && hasExtra(p, a.id)).map(a => {
+      const i = ACTIVITIES.indexOf(a), ms = clockSum(0, mine.filter(x => x.a === a.id)), key = p.id + "|" + a.id;
+      const on = S.running.some(x => same(x, p.id, a.id)), pz = S.paused.some(x => same(x, p.id, a.id));
+      return `<button type="button" class="xchip${on ? " on" : ""}${pz ? " paused" : ""}" style="--c:var(--a${i % 7})" data-clock="${key}" ${S.breakStart ? "disabled" : ""} aria-pressed="${on}" aria-label="${on ? "Stop" : "Start"} ${esc(a.name)} on ${esc(p.name)}">
+        ${on ? `<span class="xfill" style="animation-delay:-${((ms / 1000) % 60).toFixed(1)}s"></span>` : ""}${chipFace(ms, key)}<span class="xn">${esc(a.short)}</span><span class="xt" data-t="${key}" data-hm="1">${fmt(ms)}</span></button>`;
+    }).join("");
     const tot = clockSum(0, mine);
-    h += `<div class="row" style="--n:${ACTIVITIES.length}"><div class="pn">${name}</div>${clocks}
+    h += `<div class="row" style="--n:${MAIN.length}"><div class="pn">${name}${chips}</div>${clocks}
       <div class="tot">${face(tot, "tot|" + p.id)}<span class="lab">Total</span><span class="t" data-t="tot|${p.id}">${fmt(tot, anyOn)}</span></div></div>`;
   }
   $("#board").innerHTML = h;
+  fitBoard();
+  if (openProjects().length !== fitCount) { fitCount = openProjects().length; fitWindow(); }
   fillSelects(); renderReport(); renderLog(); renderSafe(); renderExtras();
   tick();
 }
@@ -478,14 +546,16 @@ function tick() {
   for (const r of S.running) {
     const key = r.projectId + "|" + r.activityId;
     const ms = clockSum(0, iv.filter(x => x.p === r.projectId && x.a === r.activityId));
-    const el = document.querySelector(`[data-t="${key}"]`); if (el) el.textContent = fmt(ms, true);
+    const el = document.querySelector(`[data-t="${key}"]`); if (el) el.textContent = fmt(ms, !el.dataset.hm);
     const hd = document.querySelector(`[data-hand="${key}"]`); if (hd) hd.style.transform = `rotate(${angle(ms)}deg)`;
+    hours(key, ms);
     projOn.add(r.projectId);
   }
   for (const pid of projOn) {
     const ms = clockSum(0, iv.filter(x => x.p === pid));
     const el = document.querySelector(`[data-t="tot|${pid}"]`); if (el) el.textContent = fmt(ms, true);
     const hd = document.querySelector(`[data-hand="tot|${pid}"]`); if (hd) hd.style.transform = `rotate(${angle(ms)}deg)`;
+    hours("tot|" + pid, ms);
   }
   // Keep the report's totals current while clocks run
   if (S.running.length && t - lastReport > 60000) renderReport();
@@ -510,6 +580,10 @@ function badge(b) {
   (b === "dot" ? navigator.setAppBadge() : b ? navigator.setAppBadge(b) : navigator.clearAppBadge()).catch(() => {});
 }
 setInterval(tick, 1000);
+function hours(key, ms) {   // redraw a face's hour wedges only when another full hour has passed
+  const g = document.querySelector(`[data-hrs="${key}"]`), h = Math.floor(ms / HOUR);
+  if (g && +g.dataset.h !== h) { g.dataset.h = h; g.innerHTML = wedges(ms); }
+}
 
 /* ---------- report period: Week / Month / Year / All / Custom, stepped with ‹ › ---------- */
 const UNITK = KEY + ":unit", UNITS = ["week", "month", "year", "all", "custom"];
@@ -656,7 +730,7 @@ function renderReport() {
     ${kpi("Projects", rows.length)}
     ${kpi("Most time", `<span class="kname">${esc(rows[0].name)}</span>`, "", `${dec(rows[0].tot)} h`)}
   </div>
-  <div class="legend">${ACTIVITIES.map(a => `<span class="tag"><i class="dot" style="--c:${actColor(a.id)}"></i>${esc(a.name)}</span>`).join("")}</div>
+  <div class="legend">${ACTIVITIES.filter((a, i) => !a.rare || rows.some(x => x.cells[i])).map(a => `<span class="tag"><i class="dot" style="--c:${actColor(a.id)}"></i>${esc(a.name)}</span>`).join("")}</div>
   <div class="tablewrap"><table class="rt">
     <thead><tr><th class="c-proj">Project</th><th>Where the time went</th><th class="num c-hrs">Hours</th></tr></thead>
     <tbody>${rows.map(x => `<tr class="prow"><td class="pname">${esc(x.name)}</td><td>${bar(cellsToParts(x.cells), x.tot, max)}</td>${hrs(x.tot)}</tr>`).join("")}</tbody>
@@ -689,10 +763,11 @@ function renderClosed() {
 }
 
 /* ---------- time entries ---------- */
+const actsFor = p => ACTIVITIES.filter(a => !a.rare || (p && hasExtra(p, a.id)));
 const opts = (list, sel) => list.map(x => `<option value="${esc(x.id)}"${x.id === sel ? " selected" : ""}>${esc(x.name)}</option>`).join("");
 const fields = e => `
   <label>Project<select name="p">${opts(S.projects.filter(p => !p.closed || p.id === e.projectId), e.projectId)}</select></label>
-  <label>Activity<select name="a">${opts(ACTIVITIES, e.activityId)}</select></label>
+  <label>Activity<select name="a">${opts(actsFor(proj(e.projectId)), e.activityId)}</select></label>
   <label>Date<input type="date" name="d" value="${dayKey(e.start)}" required></label>
   <label>Start<input type="time" name="s" value="${hm(e.start)}" required></label>
   <label>End<input type="time" name="e" value="${hm(e.end)}" required></label>
@@ -739,7 +814,7 @@ function readTimes(f) {
 function fillSelects() {
   const f = $("#addTime"), p = f.elements.p.value, a = f.elements.a.value;
   f.elements.p.innerHTML = opts(openProjects(), p);
-  f.elements.a.innerHTML = opts(ACTIVITIES, a);
+  f.elements.a.innerHTML = opts(actsFor(proj(f.elements.p.value)), a);
   $("#addToggle").disabled = !openProjects().length;
   $("#addToggle").title = openProjects().length ? "" : "Create a project first";
   if (!f.elements.d.value) f.elements.d.value = dayKey(now());
@@ -765,7 +840,7 @@ function closeMenu() {
 function drawMenu() {
   const el = $("#menu");
   const items = menu.kind === "project"
-    ? [["rename", I.pen, "Rename"], ["close", I.done, menu.confirm === "close" ? "Click again to close" : "Close project"], ["delete", I.trash, menu.confirm === "delete" ? "Click again to delete" : "Delete project", "danger"]]
+    ? [["rename", I.pen, "Rename"], embedItem(proj(menu.id)), ["close", I.done, menu.confirm === "close" ? "Click again to close" : "Close project"], ["delete", I.trash, menu.confirm === "delete" ? "Click again to delete" : "Delete project", "danger"]]
     : menu.kind === "export"
     ? [["xlsx", I.sheet, "Excel workbook"], ["pdf", I.pdf, "PDF"], ...(opt("invoices") ? [["invoice", I.receipt, per.unit === "week" ? `Invoice ${invoiceNumber(periodRange()[0])}` : "Invoice (pick Week first)"]] : [])]
     : [["copy", I.copy, "Copy summary"], ["reopen", I.undo, "Reopen project"]];
@@ -780,6 +855,16 @@ function drawMenu() {
   const x = r.left + r.width / 2 > document.documentElement.clientWidth / 2 ? r.right - w : r.left;
   el.style.left = `${Math.max(8, Math.min(x + window.scrollX, document.documentElement.clientWidth - w - 8))}px`;
 }
+// Add, or remove while it has no time (so no time is ever lost)
+const embedItem = p => p && hasExtra(p, "embed") ? ["embed-off", I.trash, "Remove Embedding clock"] : ["embed-on", I.plus, "Add Embedding clock"];
+function toggleEmbed(id) {
+  const p = proj(id); if (!p) return;
+  if (!hasExtra(p, "embed")) { p.extras = [...(p.extras || []), "embed"]; save(); render(); toast(`Embed clock added to ${shortName(p)}`); return; }
+  p.extras = (p.extras || []).filter(x => x !== "embed");
+  if (hasExtra(p, "embed")) { p.extras.push("embed"); toast("This book has Embedding time, so its clock stays. Delete those time entries first if you really want it gone."); return; }
+  if (!p.extras.length) delete p.extras;
+  save(); render(); toast("Embed clock removed");
+}
 function menuAction(act) {
   const id = menu.id;
   if ((act === "close" || act === "delete") && menu.confirm !== act) {
@@ -791,6 +876,7 @@ function menuAction(act) {
   }
   closeMenu();
   if (act === "rename") startRename(id);
+  else if (act === "embed-on" || act === "embed-off") toggleEmbed(id);
   else if (act === "close") closeProject(id);
   else if (act === "delete") deleteProject(id);
   else if (act === "copy") showSummary(proj(id), false);
@@ -822,12 +908,14 @@ function docPeriod([a, b]) {
 const PRINT_COLORS = ["#3B6EA8", "#7657A8", "#2D8A6C", "#A87A1E", "#AE4A67", "#4F7F8C", "#8C5A3C"];
 // Everything the report files need, worked out once for the chosen period
 function reportData() {
-  const r = periodRange(), [a, b] = r, t = now(), iv = intervals();
+  const r = periodRange(), [a, b] = r, t = now(), iv = intervals(), rows = grid(r);
+  // Rare activities (Embedding) get a column only if this period has time for them
+  const keep = ACTIVITIES.map((x, i) => !x.rare || rows.some(p => p.cells[i]));
   return {
     periodText: docPeriod(r), generated: t, workdays: workdays(r),
-    activities: ACTIVITIES.map((x, i) => ({id: x.id, name: x.name, color: PRINT_COLORS[i % 7]})),
+    activities: ACTIVITIES.map((x, i) => ({id: x.id, name: x.name, color: PRINT_COLORS[i % 7]})).filter((_, i) => keep[i]),
     days: periodDays(r),
-    projects: grid(r),
+    projects: rows.map(p => ({...p, cells: p.cells.filter((_, i) => keep[i])})),
     workedMs: worked(a, iv, b),
     entries: S.entries.concat(S.running.map(x => ({...x, end: t}))).filter(e => e.end > a && e.start < b)
       .map(e => ({start: e.start, end: e.end, project: (proj(e.projectId) || {}).name || "", activity: e.activityId, note: e.note || ""}))
@@ -881,7 +969,8 @@ function mergeIn(d) {
   const idMap = {};
   for (const p of d.projects) {
     const match = S.projects.find(x => x.id === p.id) || S.projects.find(x => x.name.toLowerCase() === String(p.name).toLowerCase());
-    if (match) idMap[p.id] = match.id; else S.projects.push(p);
+    if (match) { idMap[p.id] = match.id; if (!match.short && p.short) match.short = p.short; if (p.extras) match.extras = [...new Set([...(match.extras || []), ...p.extras])]; }
+    else S.projects.push(p);
   }
   const fix = x => ({...x, projectId: idMap[x.projectId] || x.projectId});
   const have = new Set(S.entries.map(e => e.id));
@@ -1047,10 +1136,9 @@ async function reconnectFile() {
 // It lives only while the main window is open (minimised is fine). It uses the main window's code and styles.
 const canMini = "documentPictureInPicture" in window;
 let mini = null;
-const STOP = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
 async function toggleMini() {
   if (mini) { mini.close(); return; }
-  try { mini = await documentPictureInPicture.requestWindow({width: 300, height: 330}); }
+  try { mini = await documentPictureInPicture.requestWindow({width: 230, height: 56}); }
   catch { toast("The mini tracker couldn't open"); return; }
   const d = mini.document;
   for (const n of document.querySelectorAll('link[rel="stylesheet"]')) { const l = d.createElement("link"); l.rel = "stylesheet"; l.href = n.href; d.head.appendChild(l); }
@@ -1069,41 +1157,33 @@ function renderMiniBtn() {
   b.setAttribute("aria-pressed", !!mini);
   b.querySelector("span").textContent = mini ? "Close mini tracker" : "Mini tracker";
 }
-function renderMini(t, iv, b) {
+function renderMini(t, iv, b) {   // one strip: today's hours and BREAK, or the tracker's question
   if (!mini) return;
   const d = mini.document, box = d.getElementById("m"); if (!box) return;
-  const row = (pid, aid, cls) => {
-    const p = proj(pid), i = ACTIVITIES.findIndex(a => a.id === aid);
-    if (!p || i < 0) return "";
-    return `<button type="button" class="mrow${cls}" style="--c:var(--a${i % 7})" data-m="clock|${pid}|${aid}" ${S.breakStart ? "disabled" : ""}>
-      <span class="dot"></span><span class="mn"><b>${esc(p.name)}</b><small>${esc(ACTIVITIES[i].name)}${cls === " paused" ? " · waiting" : ""}</small></span>
-      <span class="mt" data-mt="${pid}|${aid}"></span><span class="mi">${cls === " on" ? STOP : cls === " paused" ? PAUSE : PLAY}</span></button>`;
-  };
-  // Up to 3 clocks used most recently, so you can start one without the main window
-  const last = new Map();
-  for (const e of S.entries) { const k = e.projectId + "|" + e.activityId; if (!(last.get(k) > e.end)) last.set(k, e.end); }
-  const busy = k => S.running.concat(S.paused).some(r => r.projectId + "|" + r.activityId === k);
-  const recent = [...last].filter(([k]) => { const p = proj(k.split("|")[0]); return p && !p.closed && !busy(k); })
-    .sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k]) => k.split("|"));
-  const now_ = [...S.running.map(r => row(r.projectId, r.activityId, " on")), ...S.paused.map(r => row(r.projectId, r.activityId, " paused"))].join("");
-  const ask = gap ? `<div class="banner"><p data-mg></p><button class="btn" type="button" data-m="keep">${esc($("#gapKeep").textContent)}</button>${gap.kind === "away" ? `<button class="btn" type="button" data-m="take">${esc($("#gapTake").textContent)}</button>` : ""}<button class="btn ghost" type="button" data-m="stop">${esc($("#gapStop").textContent)}</button></div>` : "";
-  const brk = S.breakStart ? `<button type="button" class="break on" data-m="break">${PLAY}END BREAK</button>`
-    : `<button type="button" class="break" data-m="break" ${S.running.length ? "" : "disabled"}>${PAUSE}BREAK</button>`;
-  setHTML(box, `${ask}<div class="mtop"><div class="mtot"><span>Today</span><b data-mtot></b></div>${brk}</div>
-    <div class="mlist">${now_}${recent.length ? `${now_ ? `<div class="mhead">Recent</div>` : ""}${recent.map(([p, a]) => row(p, a, "")).join("")}` : ""}
-    ${!now_ && !recent.length ? `<p class="mempty">Start a clock in the main window. Clocks you use show up here.</p>` : ""}</div>`);
-  const mg = d.querySelector("[data-mg]"); if (mg) mg.textContent = $("#gapText").textContent;
-  d.querySelector("[data-mtot]").textContent = fmt(worked(b.day, iv));
-  for (const el of d.querySelectorAll("[data-mt]")) {
-    const [p, a] = el.dataset.mt.split("|"), on = S.running.some(x => same(x, p, a));
-    el.textContent = fmt(clockSum(0, iv.filter(x => x.p === p && x.a === a)), on);
+  const btn = (k, label, cls = "") => `<button type="button" class="sbtn${cls}" data-m="${k}">${label}</button>`;
+  let html;
+  if (gap) {
+    const q = gap.kind === "check" ? "Still working?" : gap.kind === "away" ? `Away ${fmt(gap.until - gap.from)}` : "Tracker was off";
+    html = `<div class="strip ask"><p>${q}</p>${gap.kind === "check" ? btn("keep", "Yes") + btn("stop", "No", " ghost")
+      : gap.kind === "away" ? btn("keep", "Keep") + btn("take", "Take out", " ghost") : btn("keep", "Keep") + btn("stop", "Stop", " ghost")}</div>`;
+  } else {
+    const r = S.running[0] || S.paused[0], i = r ? ACTIVITIES.findIndex(a => a.id === r.activityId) : -1;
+    html = `<div class="strip${S.breakStart ? " brk" : ""}"${i >= 0 ? ` style="--c:var(--a${i % 7})"` : ""}>
+      <span class="sdot${S.running.length ? " on" : ""}"></span><div class="stime"><b data-mtot></b><small data-msub></small></div>
+      ${S.breakStart ? btn("break", PLAY + "End break", " go") : `<button type="button" class="sbtn" data-m="break" ${S.running.length ? "" : "disabled"}>${PAUSE}Break</button>`}</div>`;
   }
+  setHTML(box, html);
+  const tot = d.querySelector("[data-mtot]"); if (tot) tot.textContent = fmt(worked(b.day, iv));
+  const sub = d.querySelector("[data-msub]");
+  if (sub) sub.textContent = S.breakStart ? `on break ${fmt(t - S.breakStart)}` : S.running.length ? "today" : "today · no clock on";
+  // Hovering the strip names the clocks that are running
+  const names = S.running.concat(S.paused).map(r => `${(proj(r.projectId) || {}).name}: ${(ACTIVITIES.find(a => a.id === r.activityId) || {}).name}`);
+  const strip = d.querySelector(".strip"); if (strip) strip.title = names.join("\n");
 }
 function miniClick(e) {
   const el = e.target.closest("[data-m]"); if (!el || el.disabled) return;
-  const [k, p, a] = el.dataset.m.split("|");
-  if (k === "clock") toggleClock(p, a);
-  else if (k === "break") toggleBreak();
+  const k = el.dataset.m;
+  if (k === "break") toggleBreak();
   else if (k === "keep" && gap) keepGap();
   else if (k === "take" && gap && gap.kind === "away") takeOutAway();
   else if (k === "stop" && gap) stopAtGap();
@@ -1196,23 +1276,24 @@ $("#board").addEventListener("click", e => {
   else if (d.menu) { const [k, id] = d.menu.split("|"); openMenu(k, id, b); }
   else if (d.edit) startRename(d.edit);
   else if (d.cancel) { editing = null; render(); }
+  else if (d.add) showAddProject(true);
 });
 $("#board").addEventListener("submit", e => {
   e.preventDefault();
-  const f = e.target, p = proj(f.dataset.rename), n = f.elements.n.value.trim();
-  if (p && n) { p.name = n; save(); }
+  const f = e.target, p = proj(f.dataset.rename), n = f.elements.n.value.trim(), sh = f.elements.s.value.trim();
+  if (p && n) { p.name = n; if (sh && sh !== n) p.short = sh; else delete p.short; save(); }
   editing = null; render();
 });
 function showAddProject(on) {
-  $("#addForm").hidden = !on; $("#addOpen").hidden = on;
-  if (on) $("#newName").focus(); else $("#newName").value = "";
+  $("#addForm").hidden = !on;
+  if (on) $("#newName").focus(); else $("#newName").value = $("#newShort").value = "";
+  fitBoard();
 }
-$("#addOpen").addEventListener("click", () => showAddProject(true));
 $("#addClose").addEventListener("click", () => showAddProject(false));
-$("#newName").addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); showAddProject(false); } });
+$("#addForm").addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); showAddProject(false); } });
 $("#addForm").addEventListener("submit", e => {
   e.preventDefault();
-  if (addProject($("#newName").value)) showAddProject(false); else $("#newName").focus();
+  if (addProject($("#newName").value, $("#newShort").value)) showAddProject(false); else $("#newName").focus();
 });
 
 // Views: Clocks, Reports, Settings. The tracker always opens on Clocks.
@@ -1220,6 +1301,7 @@ function setView(v) {
   document.querySelectorAll(".views [data-view]").forEach(b => b.setAttribute("aria-selected", b.dataset.view === v));
   document.querySelectorAll("[data-pane]").forEach(p => { p.hidden = p.dataset.pane !== v; });
   closeMenu(); window.scrollTo(0, 0);
+  if (v === "clocks") fitBoard();
 }
 $(".views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); });
 $("#miniBtn").addEventListener("click", toggleMini);
@@ -1250,7 +1332,7 @@ $("#menu").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (b && menu) menuAction(b.dataset.act);
 });
 document.addEventListener("click", e => { if (menu && !e.target.closest("#menu") && !e.target.closest("[data-menu]")) closeMenu(); });
-window.addEventListener("resize", closeMenu);
+window.addEventListener("resize", () => { closeMenu(); fitBoard(); });
 
 // Summary pop-up
 $("#closedCopy").addEventListener("click", async () => {
@@ -1284,6 +1366,13 @@ $("#log").addEventListener("submit", e => {
   Object.assign(x, {projectId: f.elements.p.value, activityId: f.elements.a.value, start: t[0], end: t[1]});
   const note = f.elements.note.value.trim(); if (note) x.note = note; else delete x.note;
   entryEdit = null; save(); render(); toast("Time entry updated");
+});
+// Picking another book in a time-entry form updates its activity list (Embedding only for books that have it)
+document.addEventListener("change", e => {
+  const f = e.target.closest("#addTime, .eform");
+  if (!f || e.target.name !== "p") return;
+  const a = f.elements.a.value;
+  f.elements.a.innerHTML = opts(actsFor(proj(e.target.value)), a);
 });
 $("#addTime").addEventListener("submit", e => {
   e.preventDefault();
