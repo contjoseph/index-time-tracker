@@ -26,6 +26,7 @@ const now = () => Date.now();
 // running:  [{projectId, activityId, start}]            clocks ticking right now
 // paused:   [{projectId, activityId}]                    clocks waiting for END BREAK
 // breakStart: timestamp or null
+// schedule?: {"2026-09-28": ["0-540", …]}                planned half hours per week (Monday), "day-minute"
 let S = blank();
 function blank() { return {version: 1, projects: [], entries: [], running: [], paused: [], breakStart: null}; }
 const valid = d => d && Array.isArray(d.projects) && Array.isArray(d.entries);
@@ -146,18 +147,22 @@ function toggleClock(p, a) {
 // Anyone who has already saved invoice details keeps both on without having to find the switches.
 const EXTRAS = {
   invoices: {title: "Invoices", desc: "Adds Invoice to the Export report menu: a weekly invoice made from your worked hours."},
-  notes: {title: "Ask what I did when a clock stops", desc: "A short note, like \"ch. 52-54\". Notes appear in time entries, reports and invoices."}
+  notes: {title: "Ask what I did when a clock stops", desc: "A short note, like \"ch. 52-54\". Notes appear in time entries, reports and invoices."},
+  schedule: {title: "Weekly schedule", desc: "Adds a Schedule tab: mark when you plan to work each week, then copy it for Kevin."}
 };
 const opt = k => { const o = S.options || {}; return k in o ? !!o[k] : !!S.invoice; };
 function setOpt(k, on) {
   S.options = {...(S.options || {}), [k]: on};
   if (!on && k === "notes") hideNote();
-  save(); renderExtras(); toast(`${EXTRAS[k].title}: ${on ? "on" : "off"}`);
+  save(); render(); toast(`${(EXTRAS[k] || SCH_OPTS[k]).title}: ${on ? "on" : "off"}`);
 }
 function renderExtras() {
   $("#extras").innerHTML = `<div class="safe-top"><div><h2>Extras</h2><p>Optional tools. Turn on only what you use.</p></div></div>
     ${Object.entries(EXTRAS).map(([k, x]) => `<label class="item switchrow"><div class="txt"><b>${x.title}</b><small>${x.desc}</small></div>
       <input type="checkbox" role="switch" class="switch" data-opt="${k}" ${opt(k) ? "checked" : ""}></label>`).join("")}`;
+  const tab = $('.views [data-view="schedule"]');
+  tab.hidden = !opt("schedule");
+  if (tab.hidden && !$('[data-pane="schedule"]').hidden) setView("settings");
 }
 
 /* ---------- a short note when a clock stops ("ch. 52-54"), used on the invoice ---------- */
@@ -275,6 +280,7 @@ function deleteProject(id) {
 // gap = {kind: "closed", from}          tracker was closed, or the computer asleep or off
 //       {kind: "away", from, until}     computer on, but no mouse or keyboard use (Chrome/Edge)
 //       {kind: "check", from, at}       a clock has run a long time without a "still working?" answer
+//       {kind: "plan", from, at}        a planned block (Schedule) ended at `from` with a clock still running
 const AWAYK = KEY + ":away", CHECKK = KEY + ":checked", EVERYK = KEY + ":check-every", AWAYONK = KEY + ":away-on";
 const AWAY = 5 * 60000;                // no mouse or keyboard for this long counts as away
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -289,7 +295,7 @@ function heartbeat() {
 function settle() { gap = null; lsSet(AWAYK, null); lsSet(CHECKK, now()); clearAlert(); }
 function keepGap() { settle(); tick(); }
 function stopAtGap() {
-  const at = gap.kind === "check" ? gap.at : gap.from;
+  const at = gap.kind === "check" ? gap.at : gap.kind === "plan" ? now() : gap.from;   // plan: you may have kept working past it
   S.running.forEach(r => record(r, Math.max(r.start, at)));
   S.running = []; settle();
   save(); render(); toast(`Clocks stopped at ${when(at)}`);
@@ -381,7 +387,7 @@ function onIdle(state) {
   if (state === "idle") { if (S.running.length && !lsGet(AWAYK)) lsSet(AWAYK, t - AWAY); return; }
   const from = +lsGet(AWAYK) || 0;
   lsSet(AWAYK, null);
-  if (!from || !S.running.length || (gap && gap.kind !== "check")) return;
+  if (!from || !S.running.length || (gap && gap.kind !== "check" && gap.kind !== "plan")) return;
   gap = {kind: "away", from, until: t};
   notify("Welcome back", `You were away for ${fmt(t - from)} with a clock running. Open the tracker to keep or take out that time.`);
   tick();
@@ -406,7 +412,7 @@ function renderGap(t) {
   if (!gap) return;
   const f = when(gap.from);
   $("#gapTake").hidden = gap.kind !== "away";
-  $("#gapKeep").textContent = gap.kind === "check" ? "Yes, still working" : "Keep the time";
+  $("#gapKeep").textContent = gap.kind === "check" ? "Yes, still working" : gap.kind === "plan" ? "Keep working" : "Keep the time";
   if (gap.kind === "closed") {
     $("#gapText").textContent = `Your clocks kept running while the tracker was closed or the computer was asleep or off — from ${f} until now (${fmt(t - gap.from)}).`;
     $("#gapStop").textContent = `Stop them at ${f}`;
@@ -414,6 +420,9 @@ function renderGap(t) {
     $("#gapText").textContent = `You were away from the computer from ${f} until ${when(gap.until)} (${fmt(gap.until - gap.from)}) with a clock running.`;
     $("#gapTake").textContent = `Take out the ${fmt(gap.until - gap.from)} away`;
     $("#gapStop").textContent = `Stop them at ${f}`;
+  } else if (gap.kind === "plan") {
+    $("#gapText").textContent = `Your planned time ended at ${f}, and a clock is still running.`;
+    $("#gapStop").textContent = "Stop clocks now";
   } else {
     $("#gapText").textContent = `Still working? Your clock has been running since ${f} (${fmt(gap.at - gap.from)}).`;
     $("#gapStop").textContent = `No — stop them at ${when(gap.at)}`;
@@ -515,7 +524,7 @@ function render() {
   $("#board").innerHTML = h;
   fitBoard();
   if (openProjects().length !== fitCount) { fitCount = openProjects().length; fitWindow(); }
-  fillSelects(); renderReport(); renderLog(); renderSafe(); renderExtras();
+  fillSelects(); renderReport(); renderLog(); renderSafe(); renderExtras(); renderSchedule();
   tick();
 }
 const PAUSE = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
@@ -525,14 +534,14 @@ let lastReport = 0;
 function tick() {
   const t = now(), iv = intervals(), b = bounds();
   if (t - beat > 30000) heartbeat();
-  checkStillWorking(t);
+  checkStillWorking(t); checkPlanEnd(t);
   renderGap(t);
-  const stat = (id, from) => {
-    const w = worked(from, iv), c = clockSum(from, iv);
+  const stat = (id, from, to) => {   // with a Schedule, today and this week also say what was planned
+    const w = worked(from, iv), c = clockSum(from, iv), p = to && opt("schedule") ? planned(from, to) : 0;
     $("#" + id).textContent = fmt(w);
-    $("#" + id + "S").textContent = c - w > 60000 ? `${dec(w)} h · all clocks ${fmt(c)}` : `${dec(w)} h`;
+    $("#" + id + "S").textContent = `${dec(w)} h${p ? ` of ${schH(p)} planned` : ""}${c - w > 60000 ? ` · all clocks ${fmt(c)}` : ""}`;
   };
-  stat("dDay", b.day); stat("dWeek", b.week); stat("dMonth", b.month);
+  stat("dDay", b.day, b.day + 86400000); stat("dWeek", b.week, schDay(b.week, 7)); stat("dMonth", b.month);
 
   const bb = $("#breakBtn");
   if (S.breakStart) {
@@ -540,7 +549,7 @@ function tick() {
     setHTML(bb, `<span class="bl">${PLAY}END BREAK</span><small>On break ${fmt(t - S.breakStart, true)} · ${S.paused.length} clock${S.paused.length === 1 ? "" : "s"} waiting</small>`);
   } else {
     bb.className = "break"; bb.disabled = !S.running.length;
-    setHTML(bb, `<span class="bl">${PAUSE}BREAK</span><small>${S.running.length ? `Pause ${S.running.length} running clock${S.running.length === 1 ? "" : "s"}` : "Start a clock first"}</small>`);
+    setHTML(bb, `<span class="bl">${PAUSE}START BREAK</span><small>${S.running.length ? `Pause ${S.running.length} running clock${S.running.length === 1 ? "" : "s"}` : "Start a clock first"}</small>`);
   }
   const projOn = new Set();
   for (const r of S.running) {
@@ -608,9 +617,9 @@ function rangeText([a, b]) {
   if (per.unit === "month") return `${MOL(a)} ${yr(a)}`;
   if (per.unit === "year") return String(yr(a));
   if (per.unit === "custom") return `${a ? dShort(a) : "The start"} – ${b === Infinity ? "today" : dShort(b - 1)}`;
-  const e = b - 1;
-  return withYear(`${WD(a)} ${dnum(a)}${MO(a) === MO(e) ? "" : " " + MO(a)} – ${WD(e)} ${dnum(e)} ${MO(e)}`, e);
+  return weekText(a, b);
 }
+function weekText(a, b) { const e = b - 1; return withYear(`${WD(a)} ${dnum(a)}${MO(a) === MO(e) ? "" : " " + MO(a)} – ${WD(e)} ${dnum(e)} ${MO(e)}`, e); }
 function relText() {
   const names = {week: ["This week", "Last week"], month: ["This month", "Last month"], year: ["This year", "Last year"]}[per.unit];
   return names ? names[-per.offset] || "" : "";
@@ -657,16 +666,16 @@ function periodDays([a, b]) {
   let start = a;
   if (!start) { if (!iv.length) return days; start = Math.min(...iv.map(x => x.s)); }
   const d = new Date(start); d.setHours(0, 0, 0, 0);
-  const everyDay = (end - d.getTime()) / 86400000 <= 62;
+  const everyDay = (end - d.getTime()) / 86400000 <= 62, withPlan = showPlan();
   while (d.getTime() < end) {
     const s = Math.max(d.getTime(), a); d.setDate(d.getDate() + 1);
-    const e = Math.min(d.getTime(), b), ms = worked(s, iv, e);
-    if (ms || everyDay) days.push({day: s, ms, what: ms ? dayWhat(iv, s, e) : []});
+    const e = Math.min(d.getTime(), b), ms = worked(s, iv, e), plan = withPlan ? planned(s, e) : 0;
+    if (ms || plan || everyDay) days.push({day: s, ms, plan, what: ms ? dayWhat(iv, s, e) : []});
   }
   return days;
 }
-// Only the days that have time, for the Worked hours tab
-const workedDays = r => periodDays(r).filter(x => x.ms).map(x => ({day: x.day, w: x.ms, what: x.what}));
+// The days that have time (or a plan, when planned hours are shown), for the Worked hours tab
+const workedDays = r => periodDays(r).filter(x => x.ms || x.plan).map(x => ({day: x.day, w: x.ms, plan: x.plan, what: x.what}));
 const TABK = KEY + ":tab";
 const reportTab = () => ({project: "project", closed: "closed"})[lsGet(TABK)] || "worked";
 
@@ -704,19 +713,21 @@ function renderReport() {
   if (!rows.length) { $("#summary").innerHTML = `<p class="empty">No time tracked in ${per.unit === "all" ? "any period yet" : esc(rangeText(r))}.</p>`; return; }
 
   if (tab === "worked") {
-    const days = workedDays(r), w = days.reduce((s, x) => s + x.w, 0), wd = workdays(r);
+    const days = workedDays(r), w = days.reduce((s, x) => s + x.w, 0), wd = workdays(r), nw = days.filter(x => x.w).length;
+    const plan = days.reduce((s, x) => s + x.plan, 0), pc = plan ? `<td class="num hrs plan"><b>${dec(plan)}</b></td>` : "";
+    const pcell = x => plan ? `<td class="num hrs plan">${x.plan ? `<b>${dec(x.plan)}</b>` : `<span>–</span>`}</td>` : "";
     $("#summary").innerHTML = `
     <div class="kpis">
-      ${kpi("Worked · billable", dec(w), "h", fmt(w))}
-      ${kpi("Days worked", days.length, "", wd ? `of ${wd} workday${wd === 1 ? "" : "s"}` : "")}
-      ${kpi("Average per day", dec(days.length ? w / days.length : 0), "h")}
+      ${kpi("Worked · billable", dec(w), "h", plan ? `of ${dec(plan)} h planned` : fmt(w))}
+      ${kpi("Days worked", nw, "", wd ? `of ${wd} workday${wd === 1 ? "" : "s"}` : "")}
+      ${kpi("Average per day", dec(nw ? w / nw : 0), "h")}
     </div>
     <div class="tablewrap"><table class="rt">
-      <thead><tr><th class="c-day">Day</th><th>Worked on</th><th class="num c-hrs">Hours</th></tr></thead>
+      <thead><tr><th class="c-day">Day</th><th>Worked on</th>${plan ? `<th class="num c-hrs">Planned</th>` : ""}<th class="num c-hrs">Hours</th></tr></thead>
       <tbody>${days.map(x => `<tr><td class="day"><b>${WD(x.day)} ${dnum(x.day)}</b><span>${withYear(MOL(x.day), x.day)}</span></td>
-        <td><div class="proj">${x.what.map(p => `<strong>${esc(p.name)}</strong><div class="acts">${p.acts.map(tag).join("")}</div>`).join("")}</div></td>
-        ${hrs(x.w)}</tr>`).join("")}</tbody>
-      <tfoot><tr><td colspan="2">Total worked</td>${hrs(w)}</tr></tfoot>
+        <td>${x.w ? `<div class="proj">${x.what.map(p => `<strong>${esc(p.name)}</strong><div class="acts">${p.acts.map(tag).join("")}</div>`).join("")}</div>` : `<span class="muted">Did not work</span>`}</td>
+        ${pcell(x)}${hrs(x.w)}</tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="2">Total worked</td>${pc}${hrs(w)}</tr></tfoot>
     </table></div>
     <p class="rnote">Your billable time. Clocks running at the same time count once.</p>`;
     return;
@@ -910,11 +921,11 @@ const PRINT_COLORS = ["#3B6EA8", "#7657A8", "#2D8A6C", "#A87A1E", "#AE4A67", "#4
 function reportData() {
   const r = periodRange(), [a, b] = r, t = now(), iv = intervals(), rows = grid(r);
   // Rare activities (Embedding) get a column only if this period has time for them
-  const keep = ACTIVITIES.map((x, i) => !x.rare || rows.some(p => p.cells[i]));
+  const keep = ACTIVITIES.map((x, i) => !x.rare || rows.some(p => p.cells[i])), days = periodDays(r);
   return {
     periodText: docPeriod(r), generated: t, workdays: workdays(r),
     activities: ACTIVITIES.map((x, i) => ({id: x.id, name: x.name, color: PRINT_COLORS[i % 7]})).filter((_, i) => keep[i]),
-    days: periodDays(r),
+    days, planned: days.some(x => x.plan),   // plan is 0 unless Schedule and "Show planned hours in reports" are on
     projects: rows.map(p => ({...p, cells: p.cells.filter((_, i) => keep[i])})),
     workedMs: worked(a, iv, b),
     entries: S.entries.concat(S.running.map(x => ({...x, end: t}))).filter(e => e.end > a && e.start < b)
@@ -977,6 +988,7 @@ function mergeIn(d) {
   S.entries.push(...d.entries.filter(e => !have.has(e.id)).map(fix));
   if (!S.invoice && d.invoice) S.invoice = d.invoice;
   if (!S.options && d.options) S.options = d.options;
+  for (const [w, slots] of Object.entries(d.schedule || {})) if (!(S.schedule || {})[w]) S.schedule = {...S.schedule, [w]: slots};
   if (!S.running.length && !S.breakStart) {
     S.running = (d.running || []).map(fix); S.paused = (d.paused || []).map(fix); S.breakStart = d.breakStart || null;
   }
@@ -1149,7 +1161,7 @@ async function toggleMini() {
   d.addEventListener("pointerdown", unlockSound, true);
   mini.addEventListener("pagehide", () => { mini = null; renderMiniBtn(); });
   mini.setInterval(tick, 1000);   // its own timer keeps it ticking while the main window is minimised
-  renderMiniBtn(); tick();
+  applyTheme(); renderMiniBtn(); tick();
 }
 function renderMiniBtn() {
   const b = $("#miniBtn");
@@ -1163,14 +1175,15 @@ function renderMini(t, iv, b) {   // one strip: today's hours and BREAK, or the 
   const btn = (k, label, cls = "") => `<button type="button" class="sbtn${cls}" data-m="${k}">${label}</button>`;
   let html;
   if (gap) {
-    const q = gap.kind === "check" ? "Still working?" : gap.kind === "away" ? `Away ${fmt(gap.until - gap.from)}` : "Tracker was off";
+    const q = gap.kind === "check" ? "Still working?" : gap.kind === "plan" ? "Plan ended" : gap.kind === "away" ? `Away ${fmt(gap.until - gap.from)}` : "Tracker was off";
     html = `<div class="strip ask"><p>${q}</p>${gap.kind === "check" ? btn("keep", "Yes") + btn("stop", "No", " ghost")
+      : gap.kind === "plan" ? btn("keep", "Keep") + btn("stop", "Stop", " ghost")
       : gap.kind === "away" ? btn("keep", "Keep") + btn("take", "Take out", " ghost") : btn("keep", "Keep") + btn("stop", "Stop", " ghost")}</div>`;
   } else {
     const r = S.running[0] || S.paused[0], i = r ? ACTIVITIES.findIndex(a => a.id === r.activityId) : -1;
     html = `<div class="strip${S.breakStart ? " brk" : ""}"${i >= 0 ? ` style="--c:var(--a${i % 7})"` : ""}>
       <span class="sdot${S.running.length ? " on" : ""}"></span><div class="stime"><b data-mtot></b><small data-msub></small></div>
-      ${S.breakStart ? btn("break", PLAY + "End break", " go") : `<button type="button" class="sbtn" data-m="break" ${S.running.length ? "" : "disabled"}>${PAUSE}Break</button>`}</div>`;
+      ${S.breakStart ? btn("break", PLAY + "End break", " go") : `<button type="button" class="sbtn" data-m="break" ${S.running.length ? "" : "disabled"}>${PAUSE}Start break</button>`}</div>`;
   }
   setHTML(box, html);
   const tot = d.querySelector("[data-mtot]"); if (tot) tot.textContent = fmt(worked(b.day, iv));
@@ -1187,6 +1200,156 @@ function miniClick(e) {
   else if (k === "keep" && gap) keepGap();
   else if (k === "take" && gap && gap.kind === "away") takeOutAway();
   else if (k === "stop" && gap) stopAtGap();
+}
+
+/* ---------- weekly schedule: when you plan to work, to tell Kevin (informative, not binding) ---------- */
+// Half-hour slots keyed "day-minute" (day 0 = Monday, 540 = 9:00), stored per week in S.schedule, so the
+// auto-save file and backups keep them too. The plan never starts or stops a clock; it's only compared with them.
+const SLOT = 30, SLOTMS = SLOT * 60000, SCHK = KEY + ":sched-hours", SCHFMTK = KEY + ":sched-copy", PLANTOLDK = KEY + ":plan-told";
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], DAY1 = ["M", "T", "W", "Th", "F", "Sa", "Su"];
+const SCH_OPTS = {
+  planRemind: {title: "Remind me when my planned time ends", desc: "If a clock is still running when a planned block ends, the tracker asks, like “Still working?”."},
+  planReports: {title: "Show planned hours in reports", desc: "Adds a Planned column to Worked hours, on screen and in the Excel and PDF files."}
+};
+const schOpt = k => (S.options || {})[k] !== false;   // on unless switched off
+const showPlan = () => opt("schedule") && schOpt("planReports");
+const sch = {offset: 0, drag: null, confirm: null, focus: null};
+const schHours = () => { try { const r = JSON.parse(lsGet(SCHK)); if (r && r.to > r.from) return r; } catch {} return {from: 6, to: 22}; };
+const schDay = (mon, i) => { const d = new Date(mon); d.setDate(d.getDate() + i); return d.getTime(); };
+const schMonday = () => schDay(bounds().week, 7 * sch.offset);
+const weekSlots = mon => (S.schedule || {})[dayKey(mon)] || [];
+const schSet = () => new Set(weekSlots(schMonday()));
+const slotStart = (mon, k) => { const [d, m] = k.split("-").map(Number); return new Date(schDay(mon, d)).setHours(0, m); };
+function schStore(set) {
+  const w = dayKey(schMonday()), s = {...(S.schedule || {})};
+  if (set.size) s[w] = [...set]; else delete s[w];
+  S.schedule = s; save();
+}
+// Planned time between two moments, over every week
+function planned(from, to) {
+  let ms = 0;
+  for (const [w, slots] of Object.entries(S.schedule || {})) {
+    const mon = parseDT(w, "00:00");
+    if (mon >= to || schDay(mon, 7) <= from) continue;
+    for (const k of slots) { const s = slotStart(mon, k); ms += Math.max(0, Math.min(s + SLOTMS, to) - Math.max(s, from)); }
+  }
+  return ms;
+}
+const slotTime = m => { const h = Math.floor(m / 60) % 24, mm = m % 60; return `${h % 12 || 12}${mm ? ":" + String(mm).padStart(2, "0") : ""} ${h < 12 ? "AM" : "PM"}`; };  // 540 → "9 AM"
+const schH = ms => `${+(ms / 3600000).toFixed(1)} h`;
+function schBlocks(set, d) {   // one day's slots joined into [start, end] minutes
+  const mins = [...set].filter(k => k.startsWith(d + "-")).map(k => +k.split("-")[1]).sort((a, b) => a - b), out = [];
+  for (const m of mins) { const l = out[out.length - 1]; if (l && l[1] === m) l[1] = m + SLOT; else out.push([m, m + SLOT]); }
+  return out;
+}
+// What Copy schedule copies. Full: "Monday<TAB>9 AM to 1 PM, 2 PM to 5 PM" for every day (pastes into two columns).
+// Short: "M:9am-1pm, 2-5pm", planned days only; am/pm is written once when both ends share it.
+const schFmt = () => lsGet(SCHFMTK) === "short" ? "short" : "full";
+const ampm = m => Math.floor(m / 60) % 24 < 12 ? "am" : "pm";
+const shortTime = (m, mer = true) => { const h = Math.floor(m / 60) % 24, mm = m % 60; return `${h % 12 || 12}${mm ? ":" + String(mm).padStart(2, "0") : ""}${mer ? ampm(m) : ""}`; };
+const shortRange = ([a, b]) => `${shortTime(a, ampm(a) !== ampm(b))}-${shortTime(b)}`;
+function schText(set, f = schFmt()) {
+  if (f === "short") return DAYS.map((_, d) => { const b = schBlocks(set, d); return b.length ? `${DAY1[d]}:${b.map(shortRange).join(", ")}` : ""; }).filter(Boolean).join("\n");
+  return DAYS.map((name, d) => `${name}\t${schBlocks(set, d).map(([a, b]) => `${slotTime(a)} to ${slotTime(b)}`).join(", ")}`).join("\n");
+}
+// Time the clocks ran this week, as merged [start, end] stretches (overlaps once), for the "worked" line on the grid
+function workedStretches(a, b) {
+  const iv = intervals().map(x => [Math.max(x.s, a), Math.min(x.e, b)]).filter(x => x[1] > x[0]).sort((x, y) => x[0] - y[0]), out = [];
+  for (const [s, e] of iv) { const l = out[out.length - 1]; if (l && s <= l[1]) l[1] = Math.max(l[1], e); else out.push([s, e]); }
+  return out;
+}
+function renderSchedule() {
+  const mon = schMonday(), end = schDay(mon, 7), set = schSet(), {from, to} = schHours(), today = dayKey(now()), t = now();
+  const rel = ["This week", "Last week"][-sch.offset] || (sch.offset === 1 ? "Next week" : "");
+  $("#schRange").innerHTML = `${esc(weekText(mon, end))}${rel ? `<small>${rel}</small>` : ""}`;
+  $("#schToday").disabled = sch.offset === 0;
+  const o = (h, sel, label) => `<option value="${h}"${h === sel ? " selected" : ""}>${label || slotTime(h * 60)}</option>`;
+  const hf = $("#schFrom"), ht = $("#schTo");
+  if (document.activeElement !== hf) { setHTML(hf, Array.from({length: 24}, (_, h) => o(h, from)).join("")); hf.value = from; }
+  if (document.activeElement !== ht) { setHTML(ht, Array.from({length: 24}, (_, h) => o(h + 1, to, h === 23 ? "Midnight" : "")).join("")); ht.value = to; }
+
+  // Planned vs worked. Mid-week, "so far" counts only the planned slots that have already started.
+  const plan = planned(mon, end), soFar = planned(mon, Math.min(t, end)), w = worked(mon, intervals(), end);
+  const days = DAYS.filter((_, d) => schBlocks(set, d).length).length;
+  const future = mon > t, midweek = soFar > 0 && soFar < plan, diff = w - (midweek ? soFar : plan);
+  $("#schKpis").innerHTML = `<div class="kpis">
+    ${kpi("Planned", dec(plan), "h", `${days} day${days === 1 ? "" : "s"}`)}
+    ${kpi("Worked", future ? "–" : dec(w), future ? "" : "h", future ? "week not started" : "tracked by your clocks")}
+    ${future ? kpi("Difference", "–") : kpi(midweek ? "Ahead or behind so far" : "Difference", (diff >= 0 ? "+" : "−") + dec(Math.abs(diff)), "h",
+      midweek ? `of ${dec(soFar)} h planned so far` : "worked minus planned")}
+  </div>`;
+
+  // The grid: a corner, 7 day headings, then one row per half hour. A slot where a clock ran gets a thin line
+  // (--ws/--we trim it to the part of the half hour that was worked).
+  const did = future ? [] : workedStretches(mon, Math.min(end, t)), focus = sch.focus || `0-${from * 60}`;
+  let h = `<div class="sh"></div>` + DAYS.map((n, d) => {
+    const day = schDay(mon, d), mins = schBlocks(set, d).reduce((s, [a, b]) => s + b - a, 0);
+    return `<div class="sh${dayKey(day) === today ? " today" : ""}" role="columnheader"><b>${WD(day)}</b><span>${dnum(day)} ${MO(day)}</span><em>${mins ? schH(mins * 60000) : ""}</em></div>`;
+  }).join("");
+  for (let m = from * 60; m < to * 60; m += SLOT) {
+    const half = m % 60 ? " half" : "";
+    h += `<div class="hr${half}">${half ? "" : slotTime(m)}</div>` + DAYS.map((n, d) => {
+      const k = `${d}-${m}`, on = set.has(k), s = slotStart(mon, k), e = s + SLOTMS;
+      const hit = did.filter(x => x[1] > s && x[0] < e);
+      const wv = hit.length ? ` w" style="--ws:${((Math.max(hit[0][0], s) - s) / SLOTMS).toFixed(3)};--we:${((e - Math.min(hit[hit.length - 1][1], e)) / SLOTMS).toFixed(3)}` : "";
+      return `<div class="sc${half}${on ? " on" : ""}${dayKey(s) === today ? " today" : ""}${wv}" data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}"></div>`;
+    }).join("");
+  }
+  setHTML($("#schGrid"), h);
+  if (!$("#schGrid [tabindex='0']")) { const c = $("#schGrid .sc"); if (c) c.tabIndex = 0; }
+
+  const fm = schFmt(), text = schText(set, fm);
+  document.querySelectorAll("#schFormat [data-fmt]").forEach(b => b.setAttribute("aria-pressed", b.dataset.fmt === fm));
+  // The preview shows the copied lines; in Full, the tab becomes a second column
+  setHTML($("#schText"), !set.size ? `<p class="muted">Nothing planned this week.</p>`
+    : text.split("\n").map(l => { const [a, b] = l.split("\t"); return fm === "short" ? `<p>${esc(a)}</p>` : `<p class="two"><b>${esc(a)}</b><span>${b ? esc(b) : `<i class="muted">–</i>`}</span></p>`; }).join(""));
+  $("#schFormatNote").textContent = fm === "short" ? "One line per planned day, for a quick message. Days with nothing planned are left out."
+    : "One line per day, with a tab between the day and the times, so it pastes into two spreadsheet columns.";
+  $("#schCopy").disabled = !set.size;
+
+  const cb = $("#schClear"), rb = $("#schRepeat"), last = weekSlots(schDay(mon, -7)).length;
+  cb.disabled = !set.size; cb.textContent = sch.confirm === "clear" ? "Click again to clear" : "Clear week"; cb.classList.toggle("sure", sch.confirm === "clear");
+  rb.disabled = !last; rb.title = last ? "Plan this week the same as last week" : "Nothing was planned last week";
+  rb.textContent = sch.confirm === "repeat" ? "Click again to replace this week" : "Same as last week"; rb.classList.toggle("sure", sch.confirm === "repeat");
+
+  setHTML($("#schOpts"), Object.entries(SCH_OPTS).map(([k, x]) => `<label class="item switchrow"><div class="txt"><b>${x.title}</b><small>${x.desc}</small></div>
+    <input type="checkbox" role="switch" class="switch" data-opt="${k}" ${schOpt(k) ? "checked" : ""}></label>`).join(""));
+}
+function schGo(offset) { sch.offset = offset; sch.confirm = null; renderSchedule(); }
+function schAsk(kind) {   // the first click of Clear or Same as last week, when it would replace a plan
+  sch.confirm = kind; renderSchedule();
+  const o = sch.offset;
+  setTimeout(() => { if (sch.confirm === kind && sch.offset === o) { sch.confirm = null; renderSchedule(); } }, CONFIRM_FOR);
+}
+// Dragging marks a rectangle from the first slot to the current one; starting on a filled slot erases instead
+const schRect = ({d0, m0, d1, m1}) => {
+  const keys = [];
+  for (let d = Math.min(d0, d1); d <= Math.max(d0, d1); d++) for (let m = Math.min(m0, m1); m <= Math.max(m0, m1); m += SLOT) keys.push(`${d}-${m}`);
+  return keys;
+};
+function schPreview() {
+  const g = $("#schGrid");
+  g.querySelectorAll(".add,.del").forEach(c => c.classList.remove("add", "del"));
+  if (!sch.drag) return;
+  for (const k of schRect(sch.drag)) { const c = g.querySelector(`[data-k="${k}"]`); if (c) c.classList.add(sch.drag.add ? "add" : "del"); }
+}
+function schEnd(commit) {
+  const dr = sch.drag; if (!dr) return;
+  sch.drag = null;
+  if (commit) { const set = schSet(); for (const k of schRect(dr)) dr.add ? set.add(k) : set.delete(k); schStore(set); sch.confirm = null; }
+  schPreview(); renderSchedule();
+}
+function schToggle(k) { const set = schSet(); set.has(k) ? set.delete(k) : set.add(k); sch.focus = k; schStore(set); renderSchedule(); $(`#schGrid [data-k="${k}"]`).focus(); }
+// Reminder: a planned block has just ended (in the last 15 minutes) and a clock that started before it is still running
+function checkPlanEnd(t) {
+  if (gap || !S.running.length || !opt("schedule") || !schOpt("planRemind")) return;
+  const mon = bounds().week, d = (new Date(t).getDay() + 6) % 7, started = Math.min(...S.running.map(r => r.start));
+  const ends = schBlocks(new Set(weekSlots(mon)), d).map(([, e]) => new Date(schDay(mon, d)).setHours(0, e));
+  const e = ends.filter(x => x <= t && t - x < 15 * 60000 && x > started).pop();
+  if (!e || +lsGet(PLANTOLDK) === e) return;
+  lsSet(PLANTOLDK, e);
+  gap = {kind: "plan", from: e, at: t};
+  notify("Your planned time is over", `You planned to stop at ${when(e)}, and a clock is still running. Open the tracker to answer.`);
 }
 
 /* ---------- "Keep your time safe" card ---------- */
@@ -1302,8 +1465,18 @@ function setView(v) {
   document.querySelectorAll("[data-pane]").forEach(p => { p.hidden = p.dataset.pane !== v; });
   closeMenu(); window.scrollTo(0, 0);
   if (v === "clocks") fitBoard();
+  if (v === "schedule") renderSchedule();   // today's column may have moved on
 }
 $(".views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); });
+
+// Appearance: "" follows the computer; "light" or "dark" sets html[data-theme] (a script in index.html's <head> sets it before the page draws)
+const THEMEK = KEY + ":theme";
+function applyTheme() {
+  const v = lsGet(THEMEK) || "";
+  for (const d of [document, mini && mini.document]) if (d) { if (v) d.documentElement.dataset.theme = v; else delete d.documentElement.dataset.theme; }
+  document.querySelectorAll("#theme [data-theme]").forEach(b => b.setAttribute("aria-pressed", b.dataset.theme === v));
+}
+$("#theme").addEventListener("click", e => { const b = e.target.closest("[data-theme]"); if (b) { lsSet(THEMEK, b.dataset.theme || null); applyTheme(); } });
 $("#miniBtn").addEventListener("click", toggleMini);
 document.addEventListener("pointerdown", unlockSound, true);
 document.addEventListener("keydown", unlockSound, true);
@@ -1385,6 +1558,58 @@ $("#addTime").addEventListener("submit", e => {
   save(); render(); toast(`Added ${fmt(t[1] - t[0])} to ${proj(f.elements.p.value).name}`);
 });
 
+// Weekly schedule
+$("#schPrev").addEventListener("click", () => schGo(sch.offset - 1));
+$("#schNext").addEventListener("click", () => schGo(sch.offset + 1));
+$("#schToday").addEventListener("click", () => schGo(0));
+["#schFrom", "#schTo"].forEach(s => $(s).addEventListener("change", e => {
+  let f = +$("#schFrom").value, t = +$("#schTo").value;
+  if (t <= f) { if (e.target.id === "schFrom") t = Math.min(24, f + 1); else f = Math.max(0, t - 1); }
+  lsSet(SCHK, JSON.stringify({from: f, to: t})); sch.focus = null; e.target.blur(); renderSchedule();
+}));
+$("#schCopy").addEventListener("click", async () => {
+  const ok = await copyText(schText(schSet()));
+  toast(ok ? "Schedule copied. Paste it where Kevin will see it." : "Couldn't copy. Select the text under What gets copied and press Ctrl+C.");
+});
+$("#schFormat").addEventListener("click", e => { const b = e.target.closest("[data-fmt]"); if (b) { lsSet(SCHFMTK, b.dataset.fmt); renderSchedule(); } });
+$("#schClear").addEventListener("click", () => {
+  if (sch.confirm !== "clear") { schAsk("clear"); return; }
+  sch.confirm = null; schStore(new Set()); renderSchedule(); toast("Week cleared");
+});
+$("#schRepeat").addEventListener("click", () => {
+  const last = weekSlots(schDay(schMonday(), -7));
+  if (!last.length) return;
+  if (schSet().size && sch.confirm !== "repeat") { schAsk("repeat"); return; }
+  sch.confirm = null; schStore(new Set(last)); renderSchedule(); toast("Planned the same as last week");
+});
+$("#schOpts").addEventListener("change", e => { if (e.target.dataset.opt) setOpt(e.target.dataset.opt, e.target.checked); });
+const schGrid = $("#schGrid");
+schGrid.addEventListener("pointerdown", e => {
+  const c = e.target.closest(".sc"); if (!c || e.button > 0) return;
+  e.preventDefault();
+  const [d, m] = c.dataset.k.split("-").map(Number);
+  sch.drag = {d0: d, m0: m, d1: d, m1: m, add: !schSet().has(c.dataset.k)};
+  sch.focus = c.dataset.k;
+  schGrid.setPointerCapture(e.pointerId); schPreview();
+});
+schGrid.addEventListener("pointermove", e => {
+  if (!sch.drag) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY), c = el && el.closest && el.closest("#schGrid .sc"); if (!c) return;
+  const [d, m] = c.dataset.k.split("-").map(Number);
+  if (d !== sch.drag.d1 || m !== sch.drag.m1) { sch.drag.d1 = d; sch.drag.m1 = m; schPreview(); }
+});
+schGrid.addEventListener("pointerup", () => schEnd(true));
+schGrid.addEventListener("pointercancel", () => schEnd(false));
+// Keyboard: arrows move, Space or Enter fills or empties a slot
+schGrid.addEventListener("keydown", e => {
+  const c = e.target.closest(".sc"); if (!c) return;
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); schToggle(c.dataset.k); return; }
+  const mv = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -SLOT], ArrowDown: [0, SLOT]}[e.key]; if (!mv) return;
+  e.preventDefault();
+  const [d, m] = c.dataset.k.split("-").map(Number), n = schGrid.querySelector(`[data-k="${d + mv[0]}-${m + mv[1]}"]`);
+  if (n) { c.tabIndex = -1; n.tabIndex = 0; sch.focus = n.dataset.k; n.focus(); }
+});
+
 // Note bar
 $("#noteBar").addEventListener("submit", e => { e.preventDefault(); commitNote(); });
 $("#noteSkip").addEventListener("click", hideNote);
@@ -1425,6 +1650,7 @@ $("#restoreFile").addEventListener("change", e => { if (e.target.files[0]) resto
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if (!$("#noteBar").hidden) { hideNote(); return; }
+  if (sch.drag) { schEnd(false); return; }
   if (menu) { const a = menu.anchor; closeMenu(); if (a && a.isConnected) a.focus(); return; }
   if (editing) { editing = null; render(); }
   if (entryEdit) { entryEdit = null; renderLog(); }
@@ -1432,7 +1658,7 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------- start ---------- */
-load(); heartbeat(); render(); renderMiniBtn(); reconnectFile(); resumeAway();
+load(); heartbeat(); applyTheme(); render(); renderMiniBtn(); reconnectFile(); resumeAway();
 // Right-click menu on the taskbar icon (manifest "shortcuts") opens ?do=break or ?do=stop
 function runShortcut(url) {
   const a = new URL(url).searchParams.get("do");

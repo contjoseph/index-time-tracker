@@ -1,7 +1,8 @@
 /* Report files: one Excel workbook with three sheets, and one PDF with the same three parts.
    The tracker works out the numbers and passes plain data:
    d = {periodText, generated, activities:[{id, name, color}],
-        days:[{day, ms, what:[{name, acts:[activityId]}]}]    every day of the period up to today; ms 0 = did not work
+        days:[{day, ms, plan, what:[{name, acts:[activityId]}]}]    every day of the period up to today; ms 0 = did not work
+        planned: true when any day has planned time (Schedule) → a Planned column in Worked hours
         workdays, projects:[{name, cells:[ms per activity], tot}], workedMs,
         entries:[{start, end, project, activity}]} */
 (function (root) {
@@ -82,10 +83,12 @@ function noneRow(ws, row, width, text = NONE) {
 
 function workedSheet(wb, d) {
   const ws = wb.addWorksheet("Worked hours", {properties: {tabColor: {argb: INK}}});
-  ws.columns = [{width: 20}, {width: 70}, {width: 16}];
-  sheetTitle(ws, "Worked hours", WORKED_NOTE, d, 3);
+  // With a schedule, a Planned column sits before Hours (Hours stays last)
+  const P = !!d.planned, W = P ? 4 : 3, HL = ws.getColumn(W).letter;
+  ws.columns = P ? [{width: 20}, {width: 56}, {width: 18}, {width: 16}] : [{width: 20}, {width: 70}, {width: 16}];
+  sheetTitle(ws, "Worked hours", WORKED_NOTE, d, W);
   const H = 9, first = H + 1, days = d.days.length ? d.days : [{day: null, ms: 0, what: []}], last = H + days.length;
-  headRow(ws, H, ["Day", "Worked on", "Hours"]);
+  headRow(ws, H, P ? ["Day", "Worked on", "Planned", "Hours"] : ["Day", "Worked on", "Hours"], [], 2);
   days.forEach((x, i) => {
     const r = ws.getRow(first + i);
     if (x.day != null) { r.getCell(1).value = xlDate(x.day); r.getCell(1).numFmt = "ddd d mmm"; }
@@ -95,20 +98,22 @@ function workedSheet(wb, d) {
       r.getCell(2).value = {richText: x.what.flatMap((p, j) => [
         {text: (j ? "\n" : "") + p.name + "   ", font: {bold: true, size: 11}},
         {text: p.acts.map(id => actOf(d, id).name).join(", "), font: {size: 10, color: {argb: MUTED}}}])};
-      r.getCell(3).value = hrs(x.ms); r.getCell(3).numFmt = "0.00"; r.getCell(3).font = {bold: true};
+      r.getCell(W).value = hrs(x.ms); r.getCell(W).numFmt = "0.00"; r.getCell(W).font = {bold: true};
     } else {
       r.getCell(2).value = NONE; r.getCell(2).font = {italic: true, color: {argb: MUTED}};
     }
-    r.getCell(2).alignment = {wrapText: true, vertical: "top"}; r.getCell(3).alignment = {vertical: "top"};
+    if (P && x.plan) { const c = r.getCell(3); c.value = hrs(x.plan); c.numFmt = "0.00"; c.font = {color: {argb: MUTED}}; }
+    for (let c = 2; c <= W; c++) r.getCell(c).alignment = c === 2 ? {wrapText: true, vertical: "top"} : {vertical: "top"};
     r.height = Math.max(20, 15.5 * Math.max(1, x.what.length));
-    lineUnder(ws, first + i, 3);
+    lineUnder(ws, first + i, W);
   });
-  totalRow(ws, last + 1, 3, "Total worked", [3], first, last);
-  const w = d.days.reduce((s, x) => s + x.ms, 0), n = d.days.filter(x => x.ms).length;
+  totalRow(ws, last + 1, W, "Total worked", P ? [3, 4] : [3], first, last);
+  const w = d.days.reduce((s, x) => s + x.ms, 0), n = d.days.filter(x => x.ms).length, plan = d.days.reduce((s, x) => s + (x.plan || 0), 0);
   kpiCells(ws, 5, [
-    ["Hours worked", {formula: `C${last + 1}`, result: +(w / 3600000).toFixed(2)}, "0.00"],
-    ["Days worked", {formula: `COUNT(C${first}:C${last})`, result: n}],
-    ["Average per day", {formula: `IF(COUNT(C${first}:C${last}),C${last + 1}/COUNT(C${first}:C${last}),0)`, result: n ? +(w / 3600000 / n).toFixed(2) : 0}, "0.00"]]);
+    ["Hours worked", {formula: `${HL}${last + 1}`, result: +(w / 3600000).toFixed(2)}, "0.00"],
+    ["Days worked", {formula: `COUNT(${HL}${first}:${HL}${last})`, result: n}],
+    ["Average per day", {formula: `IF(COUNT(${HL}${first}:${HL}${last}),${HL}${last + 1}/COUNT(${HL}${first}:${HL}${last}),0)`, result: n ? +(w / 3600000 / n).toFixed(2) : 0}, "0.00"],
+    ...(P ? [["Hours planned", {formula: `C${last + 1}`, result: +(plan / 3600000).toFixed(2)}, "0.00"]] : [])]);
   ws.views = [{state: "frozen", ySplit: H, showGridLines: false}];
   ws.pageSetup = {orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: `${H}:${H}`};
 }
@@ -188,6 +193,7 @@ function buildPDF(jsPDF, d) {
   doc.setProperties({title: `Time report · ${d.periodText}`, creator: "Index Time Tracker"});
   const acts = d.activities, rows = sortedProjects(d), all = rows.reduce((s, x) => s + x.tot, 0);
   const w = d.days.reduce((s, x) => s + x.ms, 0), nDays = d.days.filter(x => x.ms).length;
+  const P = !!d.planned, plan = d.days.reduce((s, x) => s + (x.plan || 0), 0), HI = P ? 3 : 2;   // HI: the Hours column
   const txt = (s, x, y, {size = 10, bold = false, color = C.ink, align = "left", italic = false} = {}) => {
     doc.setFont("helvetica", bold ? (italic ? "bolditalic" : "bold") : (italic ? "italic" : "normal"));
     doc.setFontSize(size); doc.setTextColor(...color);
@@ -219,7 +225,7 @@ function buildPDF(jsPDF, d) {
   y += 15; txt(`Made ${stamp(d.generated)}`, PAGE.m, y, {size: 8.5, color: C.muted});
   y += 16;
   const boxW = BODY_W / 3, boxH = 58, kp = [
-    ["HOURS WORKED", dec(w), "h", hmm(w) + " · billable"],
+    ["HOURS WORKED", dec(w), "h", P ? `billable · of ${dec(plan)} h planned` : hmm(w) + " · billable"],
     ["PROJECT TIME", dec(all), "h", `${rows.length} project${rows.length === 1 ? "" : "s"}`],
     ["DAYS WORKED", String(nDays), "", d.workdays ? `of ${d.workdays} workday${d.workdays === 1 ? "" : "s"}` : ""]];
   doc.setDrawColor(...C.line); doc.setLineWidth(0.8);
@@ -240,12 +246,13 @@ function buildPDF(jsPDF, d) {
   const days = d.days.length ? d.days : [{day: null, ms: 0, what: []}];
   const workedLines = x => x.what.map(p => ({name: p.name, acts: p.acts.map(id => actOf(d, id).name).join(", ")}));
   doc.autoTable({...base, startY: y,
-    head: [["DAY", "WORKED ON", "HOURS"]],
-    body: days.map(x => [x.day == null ? d.periodText : `${WD(x.day)} ${dnum(x.day)} ${MO(x.day)}`, x.ms ? workedLines(x).map(l => `${l.name}   ${l.acts}`).join("\n") : NONE, x.ms ? dec(x.ms) : ""]),
-    foot: [["Total worked", "", dec(w)]],
-    columnStyles: {0: {cellWidth: 82, fontStyle: "bold"}, 2: {cellWidth: 60, halign: "right", fontStyle: "bold"}},
+    head: [["DAY", "WORKED ON", ...(P ? ["PLANNED"] : []), "HOURS"]],
+    body: days.map(x => [x.day == null ? d.periodText : `${WD(x.day)} ${dnum(x.day)} ${MO(x.day)}`, x.ms ? workedLines(x).map(l => `${l.name}   ${l.acts}`).join("\n") : NONE,
+      ...(P ? [x.plan ? dec(x.plan) : "–"] : []), x.ms ? dec(x.ms) : ""]),
+    foot: [["Total worked", "", ...(P ? [dec(plan)] : []), dec(w)]],
+    columnStyles: {0: {cellWidth: 82, fontStyle: "bold"}, [HI]: {cellWidth: 60, halign: "right", fontStyle: "bold"}, ...(P ? {2: {cellWidth: 60, halign: "right", textColor: C.muted}} : {})},
     didParseCell: data => {
-      if (data.column.index === 2) data.cell.styles.halign = "right";
+      if (data.column.index >= 2) data.cell.styles.halign = "right";
       if (data.section === "body" && !days[data.row.index].ms) { data.cell.styles.textColor = C.muted; data.cell.styles.fontStyle = data.column.index === 1 ? "italic" : "bold"; }
     },
     // Draw "Worked on" ourselves, so project names are bold and activities grey
