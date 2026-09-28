@@ -386,12 +386,16 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
 .sgrid .half{border-top-style:dashed}
 .sgrid .hr.half{border-top-color:transparent}
 .sgrid .sc:hover{background:var(--soft)}
-.sgrid .sc.on{background:var(--ok);border-top-color:var(--ok)}
-.sgrid .sc.add,.sgrid .sc.on.del{background:color-mix(in srgb,var(--ok) 35%,var(--surface))}
+/* planned: a soft tint with a solid edge down the left, calm in both themes */
+.sgrid .sc.on{background:color-mix(in srgb,var(--ok) 26%,var(--surface));border-top-color:color-mix(in srgb,var(--ok) 40%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}
+.sgrid .sc.add{background:color-mix(in srgb,var(--ok) 42%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}
+.sgrid .sc.on.del{background:var(--soft);box-shadow:none}
+/* each block's times, in its first visible slot */
+.sgrid .blab{position:absolute;left:8px;top:3px;max-width:calc(100% - 22px);font-size:11.5px;font-weight:700;line-height:1.2;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .sgrid .sc:focus-visible{outline-offset:-2px}
 .sched .rnote{border-top:1px solid var(--line)}
 .slegend{padding-bottom:10px}
-.sk{display:inline-block;flex:none;width:14px;height:10px;border-radius:3px;background:var(--ok)}
+.sk{display:inline-block;flex:none;width:16px;height:12px;border-radius:2px;background:color-mix(in srgb,var(--ok) 26%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}
 .sk.did{width:5px;height:14px;border-radius:0;background:var(--ink)}
 .scopy{padding:12px var(--pad) 4px;border-top:1px solid var(--line);font-size:15px;line-height:1.75}
 .scopy p{margin:0;overflow-wrap:anywhere}
@@ -401,6 +405,11 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
 .rt .plan b{color:var(--muted);font-weight:700}
 .rt .plan span{color:var(--muted)}
 .safe-top .push{margin-left:auto}
+.zonebox{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.zonebox small{font-size:13px}
+.scopy .zl{color:var(--muted);font-size:13.5px;font-weight:700}
+/* the live label by the pointer while dragging on the schedule */
+.schtip{position:fixed;z-index:50;background:var(--ink);color:var(--surface);font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;white-space:nowrap;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 
 /* ---------- mini tracker: one small strip that stays on top of other windows (Chrome and Edge) ---------- */
 body.mini{padding:0;min-width:0;overflow:hidden;background:var(--surface)}

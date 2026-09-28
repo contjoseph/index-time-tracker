@@ -1205,26 +1205,71 @@ function miniClick(e) {
 /* ---------- weekly schedule: when you plan to work, to tell Kevin (informative, not binding) ---------- */
 // Half-hour slots keyed "day-minute" (day 0 = Monday, 540 = 9:00), stored per week in S.schedule, so the
 // auto-save file and backups keep them too. The plan never starts or stops a clock; it's only compared with them.
+// Slots are stored in YOUR time. The grid can show them in Kevin's time (Eastern), and Copy schedule always
+// sends Eastern: both work by turning slots into timestamps and back, so daylight saving is handled by the browser.
 const SLOT = 30, SLOTMS = SLOT * 60000, SCHK = KEY + ":sched-hours", SCHFMTK = KEY + ":sched-copy", PLANTOLDK = KEY + ":plan-told";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], DAY1 = ["M", "T", "W", "Th", "F", "Sa", "Su"];
+const ET = "America/New_York";   // Kevin, in Pennsylvania: EDT in summer, EST in winter
 const SCH_OPTS = {
   planRemind: {title: "Remind me when my planned time ends", desc: "If a clock is still running when a planned block ends, the tracker asks, like “Still working?”."},
   planReports: {title: "Show planned hours in reports", desc: "Adds a Planned column to Worked hours, on screen and in the Excel and PDF files."}
 };
 const schOpt = k => (S.options || {})[k] !== false;   // on unless switched off
 const showPlan = () => opt("schedule") && schOpt("planReports");
-const sch = {offset: 0, drag: null, confirm: null, focus: null};
+const sch = {offset: 0, drag: null, confirm: null, focus: null, zone: "local"};   // zone: what the grid shows; opens on "local"
 const schHours = () => { try { const r = JSON.parse(lsGet(SCHK)); if (r && r.to > r.from) return r; } catch {} return {from: 6, to: 22}; };
 const schDay = (mon, i) => { const d = new Date(mon); d.setDate(d.getDate() + i); return d.getTime(); };
-const schMonday = () => schDay(bounds().week, 7 * sch.offset);
+const schMonday = () => schDay(bounds().week, 7 * sch.offset);   // the week shown, as your Monday (its date names the week in any zone)
 const weekSlots = mon => (S.schedule || {})[dayKey(mon)] || [];
-const schSet = () => new Set(weekSlots(schMonday()));
 const slotStart = (mon, k) => { const [d, m] = k.split("-").map(Number); return new Date(schDay(mon, d)).setHours(0, m); };
-function schStore(set) {
-  const w = dayKey(schMonday()), s = {...(S.schedule || {})};
-  if (set.size) s[w] = [...set]; else delete s[w];
+
+// Time zones. zparts: the wall-clock date and minute of a moment in a zone. zoneTs: the reverse.
+const zfmt = {};
+function zparts(ts, tz) {
+  const f = zfmt[tz] || (zfmt[tz] = new Intl.DateTimeFormat("en-US", {timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric"}));
+  const p = {}; for (const x of f.formatToParts(ts)) p[x.type] = +x.value;
+  return {y: p.year, mo: p.month, d: p.day, min: (p.hour % 24) * 60 + p.minute};
+}
+const zoneOff = (ts, tz) => { const p = zparts(ts, tz); return Date.UTC(p.y, p.mo - 1, p.d, 0, p.min) - Math.floor(ts / 60000) * 60000; };
+function zoneTs(y, mo, d, min, tz) { const g = Date.UTC(y, mo - 1, d, 0, min), t1 = g - zoneOff(g, tz); return g - zoneOff(t1, tz); }
+const zoneAbbr = ts => new Intl.DateTimeFormat("en-US", {timeZone: ET, timeZoneName: "short"}).formatToParts(ts).find(p => p.type === "timeZoneName").value;
+const aheadOf = ts => zoneOff(ts, ET) + new Date(ts).getTimezoneOffset() * 60000;   // how far Kevin's clock is ahead of yours (ms)
+// Day d, minute m of the week that starts on `mon`'s date, in zone tz (null = your time) → timestamp
+function vts(mon, d, m, tz) { const x = new Date(schDay(mon, d)); return tz ? zoneTs(x.getFullYear(), x.getMonth() + 1, x.getDate(), m, tz) : x.setHours(0, m); }
+const tzOf = z => z === "et" ? ET : null;
+// The week's slots as seen in a zone. Your Sunday night can be Kevin's Monday, so nearby weeks are read too.
+function viewSet(tz, mon) {
+  if (!tz) return new Set(weekSlots(mon));
+  const m0 = new Date(mon), base = Date.UTC(m0.getFullYear(), m0.getMonth(), m0.getDate()), out = new Set();
+  for (const w of [-7, 0, 7]) {
+    const wm = schDay(mon, w);
+    for (const k of weekSlots(wm)) {
+      const p = zparts(slotStart(wm, k), tz), di = Math.round((Date.UTC(p.y, p.mo - 1, p.d) - base) / 86400000);
+      if (di >= 0 && di < 7) out.add(`${di}-${p.min}`);
+    }
+  }
+  return out;
+}
+// Add or remove slots given in a zone's view: each becomes a timestamp, then your week and your "day-minute"
+function applyKeys(tz, mon, keys, add) {
+  const s = {...(S.schedule || {})}, sets = {};
+  for (const k of keys) {
+    const [d, m] = k.split("-").map(Number), ts = vts(mon, d, m, tz), x = new Date(ts);
+    const lm = new Date(x.getFullYear(), x.getMonth(), x.getDate() - (x.getDay() + 6) % 7), w = dayKey(lm.getTime());
+    const set = sets[w] || (sets[w] = new Set(s[w] || []));
+    const lk = `${(x.getDay() + 6) % 7}-${x.getHours() * 60 + x.getMinutes()}`;
+    add ? set.add(lk) : set.delete(lk);
+  }
+  for (const [w, set] of Object.entries(sets)) { if (set.size) s[w] = [...set]; else delete s[w]; }
   S.schedule = s; save();
 }
+// The toggle is offered only when Kevin's time differs from yours by whole half hours (so the grid still lines up)
+function etGap(mon) {
+  const pts = [0, 3, 7].map(i => aheadOf(schDay(mon, i) + 12 * 3600000));
+  return {mid: pts[1], aligned: pts.every(x => x % SLOTMS === 0) && pts.some(x => x !== 0)};
+}
+const aheadText = ms => ms ? `${+(Math.abs(ms) / 3600000).toFixed(2)} h ${ms > 0 ? "ahead of" : "behind"} you` : "on the same time as you";
+
 // Planned time between two moments, over every week
 function planned(from, to) {
   let ms = 0;
@@ -1242,7 +1287,8 @@ function schBlocks(set, d) {   // one day's slots joined into [start, end] minut
   for (const m of mins) { const l = out[out.length - 1]; if (l && l[1] === m) l[1] = m + SLOT; else out.push([m, m + SLOT]); }
   return out;
 }
-// What Copy schedule copies. Full: "Monday<TAB>9 AM to 1 PM, 2 PM to 5 PM" for every day (pastes into two columns).
+// What Copy schedule copies, always in Kevin's time, with a first line naming it.
+// Full: "Monday<TAB>9 AM to 1 PM, 2 PM to 5 PM" for every day (pastes into two columns).
 // Short: "M:9am-1pm, 2-5pm", planned days only; am/pm is written once when both ends share it.
 const schFmt = () => lsGet(SCHFMTK) === "short" ? "short" : "full";
 const ampm = m => Math.floor(m / 60) % 24 < 12 ? "am" : "pm";
@@ -1252,6 +1298,14 @@ function schText(set, f = schFmt()) {
   if (f === "short") return DAYS.map((_, d) => { const b = schBlocks(set, d); return b.length ? `${DAY1[d]}:${b.map(shortRange).join(", ")}` : ""; }).filter(Boolean).join("\n");
   return DAYS.map((name, d) => `${name}\t${schBlocks(set, d).map(([a, b]) => `${slotTime(a)} to ${slotTime(b)}`).join(", ")}`).join("\n");
 }
+function zoneLine(mon) {   // "Eastern time (EDT)", or "Eastern time (EDT, EST from Sun 1 Nov)" in the week the clocks change
+  const ab = DAYS.map((_, d) => zoneAbbr(vts(mon, d, 720, ET))), i = ab.findIndex(x => x !== ab[0]);
+  if (i < 0) return `Eastern time (${ab[0]})`;
+  const day = schDay(mon, i);
+  return `Eastern time (${ab[0]}, ${ab[i]} from ${WD(day)} ${dnum(day)} ${MO(day)})`;
+}
+const kevinSet = () => viewSet(ET, schMonday());
+const copyOut = (f = schFmt()) => `${zoneLine(schMonday())}\n${schText(kevinSet(), f)}`;
 // Time the clocks ran this week, as merged [start, end] stretches (overlaps once), for the "worked" line on the grid
 function workedStretches(a, b) {
   const iv = intervals().map(x => [Math.max(x.s, a), Math.min(x.e, b)]).filter(x => x[1] > x[0]).sort((x, y) => x[0] - y[0]), out = [];
@@ -1259,19 +1313,26 @@ function workedStretches(a, b) {
   return out;
 }
 function renderSchedule() {
-  const mon = schMonday(), end = schDay(mon, 7), set = schSet(), {from, to} = schHours(), today = dayKey(now()), t = now();
+  const mon = schMonday(), gapInfo = etGap(mon);
+  if (!gapInfo.aligned) sch.zone = "local";
+  const tz = tzOf(sch.zone), set = viewSet(tz, mon), {from, to} = schHours(), t = now();
+  const a = vts(mon, 0, 0, tz), end = vts(mon, 7, 0, tz);
+  const tp = tz ? zparts(t, tz) : null, today = tz ? `${tp.y}-${String(tp.mo).padStart(2, "0")}-${String(tp.d).padStart(2, "0")}` : dayKey(t);
   const rel = ["This week", "Last week"][-sch.offset] || (sch.offset === 1 ? "Next week" : "");
-  $("#schRange").innerHTML = `${esc(weekText(mon, end))}${rel ? `<small>${rel}</small>` : ""}`;
+  $("#schRange").innerHTML = `${esc(weekText(mon, schDay(mon, 7)))}${rel ? `<small>${rel}</small>` : ""}`;
   $("#schToday").disabled = sch.offset === 0;
+  $("#schZoneBox").hidden = !gapInfo.aligned;
+  document.querySelectorAll("#schZone [data-zone]").forEach(b => b.setAttribute("aria-pressed", b.dataset.zone === sch.zone));
+  $("#schZoneHint").textContent = `Kevin is ${aheadText(gapInfo.mid)}`;
   const o = (h, sel, label) => `<option value="${h}"${h === sel ? " selected" : ""}>${label || slotTime(h * 60)}</option>`;
   const hf = $("#schFrom"), ht = $("#schTo");
   if (document.activeElement !== hf) { setHTML(hf, Array.from({length: 24}, (_, h) => o(h, from)).join("")); hf.value = from; }
   if (document.activeElement !== ht) { setHTML(ht, Array.from({length: 24}, (_, h) => o(h + 1, to, h === 23 ? "Midnight" : "")).join("")); ht.value = to; }
 
   // Planned vs worked. Mid-week, "so far" counts only the planned slots that have already started.
-  const plan = planned(mon, end), soFar = planned(mon, Math.min(t, end)), w = worked(mon, intervals(), end);
+  const plan = planned(a, end), soFar = planned(a, Math.min(t, end)), w = worked(a, intervals(), end);
   const days = DAYS.filter((_, d) => schBlocks(set, d).length).length;
-  const future = mon > t, midweek = soFar > 0 && soFar < plan, diff = w - (midweek ? soFar : plan);
+  const future = a > t, midweek = soFar > 0 && soFar < plan, diff = w - (midweek ? soFar : plan);
   $("#schKpis").innerHTML = `<div class="kpis">
     ${kpi("Planned", dec(plan), "h", `${days} day${days === 1 ? "" : "s"}`)}
     ${kpi("Worked", future ? "–" : dec(w), future ? "" : "h", future ? "week not started" : "tracked by your clocks")}
@@ -1279,35 +1340,38 @@ function renderSchedule() {
       midweek ? `of ${dec(soFar)} h planned so far` : "worked minus planned")}
   </div>`;
 
-  // The grid: a corner, 7 day headings, then one row per half hour. A slot where a clock ran gets a thin line
-  // (--ws/--we trim it to the part of the half hour that was worked).
-  const did = future ? [] : workedStretches(mon, Math.min(end, t)), focus = sch.focus || `0-${from * 60}`;
+  // The grid: a corner, 7 day headings, then one row per half hour. Each block shows its times in its first
+  // visible slot. A slot where a clock ran gets a thin line (--ws/--we trim it to the part that was worked).
+  const did = future ? [] : workedStretches(a, Math.min(end, t)), focus = sch.focus || `0-${from * 60}`;
+  const labels = {};
+  DAYS.forEach((_, d) => schBlocks(set, d).forEach(([s, e]) => { const at = Math.max(s, from * 60); if (at < e && at < to * 60) labels[`${d}-${at}`] = shortRange([s, e]); }));
   let h = `<div class="sh"></div>` + DAYS.map((n, d) => {
-    const day = schDay(mon, d), mins = schBlocks(set, d).reduce((s, [a, b]) => s + b - a, 0);
+    const day = schDay(mon, d), mins = schBlocks(set, d).reduce((s, [x, y]) => s + y - x, 0);
     return `<div class="sh${dayKey(day) === today ? " today" : ""}" role="columnheader"><b>${WD(day)}</b><span>${dnum(day)} ${MO(day)}</span><em>${mins ? schH(mins * 60000) : ""}</em></div>`;
   }).join("");
   for (let m = from * 60; m < to * 60; m += SLOT) {
     const half = m % 60 ? " half" : "";
     h += `<div class="hr${half}">${half ? "" : slotTime(m)}</div>` + DAYS.map((n, d) => {
-      const k = `${d}-${m}`, on = set.has(k), s = slotStart(mon, k), e = s + SLOTMS;
+      const k = `${d}-${m}`, on = set.has(k), s = vts(mon, d, m, tz), e = s + SLOTMS;
       const hit = did.filter(x => x[1] > s && x[0] < e);
       const wv = hit.length ? ` w" style="--ws:${((Math.max(hit[0][0], s) - s) / SLOTMS).toFixed(3)};--we:${((e - Math.min(hit[hit.length - 1][1], e)) / SLOTMS).toFixed(3)}` : "";
-      return `<div class="sc${half}${on ? " on" : ""}${dayKey(s) === today ? " today" : ""}${wv}" data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}"></div>`;
+      return `<div class="sc${half}${on ? " on" : ""}${dayKey(schDay(mon, d)) === today ? " today" : ""}${wv}" data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}">${labels[k] ? `<span class="blab">${labels[k]}</span>` : ""}</div>`;
     }).join("");
   }
   setHTML($("#schGrid"), h);
   if (!$("#schGrid [tabindex='0']")) { const c = $("#schGrid .sc"); if (c) c.tabIndex = 0; }
 
-  const fm = schFmt(), text = schText(set, fm);
+  // What gets copied: always Kevin's time
+  const fm = schFmt(), ks = kevinSet(), lines = copyOut(fm).split("\n");
   document.querySelectorAll("#schFormat [data-fmt]").forEach(b => b.setAttribute("aria-pressed", b.dataset.fmt === fm));
-  // The preview shows the copied lines; in Full, the tab becomes a second column
-  setHTML($("#schText"), !set.size ? `<p class="muted">Nothing planned this week.</p>`
-    : text.split("\n").map(l => { const [a, b] = l.split("\t"); return fm === "short" ? `<p>${esc(a)}</p>` : `<p class="two"><b>${esc(a)}</b><span>${b ? esc(b) : `<i class="muted">–</i>`}</span></p>`; }).join(""));
-  $("#schFormatNote").textContent = fm === "short" ? "One line per planned day, for a quick message. Days with nothing planned are left out."
-    : "One line per day, with a tab between the day and the times, so it pastes into two spreadsheet columns.";
-  $("#schCopy").disabled = !set.size;
+  setHTML($("#schText"), !ks.size ? `<p class="muted">Nothing planned this week.</p>`
+    : `<p class="zl">${esc(lines[0])}</p>` + lines.slice(1).map(l => { const [x, y] = l.split("\t"); return fm === "short" ? `<p>${esc(x)}</p>` : `<p class="two"><b>${esc(x)}</b><span>${y ? esc(y) : `<i class="muted">–</i>`}</span></p>`; }).join(""));
+  const shift = gapInfo.mid && sch.zone === "local" ? ` Kevin is ${aheadText(gapInfo.mid)}, so these times differ from your grid.` : "";
+  $("#schFormatNote").textContent = (fm === "short" ? "One line per planned day, for a quick message. Days with nothing planned are left out."
+    : "One line per day, with a tab between the day and the times, so it pastes into two spreadsheet columns.") + shift;
+  $("#schCopy").disabled = !ks.size;
 
-  const cb = $("#schClear"), rb = $("#schRepeat"), last = weekSlots(schDay(mon, -7)).length;
+  const cb = $("#schClear"), rb = $("#schRepeat"), last = viewSet(tz, schDay(mon, -7)).size;
   cb.disabled = !set.size; cb.textContent = sch.confirm === "clear" ? "Click again to clear" : "Clear week"; cb.classList.toggle("sure", sch.confirm === "clear");
   rb.disabled = !last; rb.title = last ? "Plan this week the same as last week" : "Nothing was planned last week";
   rb.textContent = sch.confirm === "repeat" ? "Click again to replace this week" : "Same as last week"; rb.classList.toggle("sure", sch.confirm === "repeat");
@@ -1315,6 +1379,8 @@ function renderSchedule() {
   setHTML($("#schOpts"), Object.entries(SCH_OPTS).map(([k, x]) => `<label class="item switchrow"><div class="txt"><b>${x.title}</b><small>${x.desc}</small></div>
     <input type="checkbox" role="switch" class="switch" data-opt="${k}" ${schOpt(k) ? "checked" : ""}></label>`).join(""));
 }
+const schView = () => viewSet(tzOf(sch.zone), schMonday());
+const schEdit = (keys, add) => applyKeys(tzOf(sch.zone), schMonday(), keys, add);
 function schGo(offset) { sch.offset = offset; sch.confirm = null; renderSchedule(); }
 function schAsk(kind) {   // the first click of Clear or Same as last week, when it would replace a plan
   sch.confirm = kind; renderSchedule();
@@ -1328,18 +1394,29 @@ const schRect = ({d0, m0, d1, m1}) => {
   return keys;
 };
 function schPreview() {
-  const g = $("#schGrid");
+  const g = $("#schGrid"), tip = $("#schTip");
   g.querySelectorAll(".add,.del").forEach(c => c.classList.remove("add", "del"));
-  if (!sch.drag) return;
-  for (const k of schRect(sch.drag)) { const c = g.querySelector(`[data-k="${k}"]`); if (c) c.classList.add(sch.drag.add ? "add" : "del"); }
+  const dr = sch.drag;
+  if (!dr) { tip.hidden = true; return; }
+  for (const k of schRect(dr)) { const c = g.querySelector(`[data-k="${k}"]`); if (c) c.classList.add(dr.add ? "add" : "del"); }
+  // The live label by the pointer: "Thu 2:30-4pm", "Mon–Wed 9-11am", "Erase Tue 9-10am"
+  const mon = schMonday(), da = Math.min(dr.d0, dr.d1), db = Math.max(dr.d0, dr.d1);
+  const days = da === db ? WD(schDay(mon, da)) : `${WD(schDay(mon, da))}–${WD(schDay(mon, db))}`;
+  tip.textContent = `${dr.add ? "" : "Erase "}${days} ${shortRange([Math.min(dr.m0, dr.m1), Math.max(dr.m0, dr.m1) + SLOT])}`;
+  tip.hidden = false; schTipMove();
+}
+function schTipMove() {   // keep the label just above and right of the pointer, inside the window
+  const dr = sch.drag, tip = $("#schTip"); if (!dr || tip.hidden) return;
+  tip.style.left = Math.min(dr.x + 14, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = Math.max(8, dr.y - 34) + "px";
 }
 function schEnd(commit) {
   const dr = sch.drag; if (!dr) return;
   sch.drag = null;
-  if (commit) { const set = schSet(); for (const k of schRect(dr)) dr.add ? set.add(k) : set.delete(k); schStore(set); sch.confirm = null; }
+  if (commit) { schEdit(schRect(dr), dr.add); sch.confirm = null; }
   schPreview(); renderSchedule();
 }
-function schToggle(k) { const set = schSet(); set.has(k) ? set.delete(k) : set.add(k); sch.focus = k; schStore(set); renderSchedule(); $(`#schGrid [data-k="${k}"]`).focus(); }
+function schToggle(k) { schEdit([k], !schView().has(k)); sch.focus = k; renderSchedule(); $(`#schGrid [data-k="${k}"]`).focus(); }
 // Reminder: a planned block has just ended (in the last 15 minutes) and a clock that started before it is still running
 function checkPlanEnd(t) {
   if (gap || !S.running.length || !opt("schedule") || !schOpt("planRemind")) return;
@@ -1465,7 +1542,7 @@ function setView(v) {
   document.querySelectorAll("[data-pane]").forEach(p => { p.hidden = p.dataset.pane !== v; });
   closeMenu(); window.scrollTo(0, 0);
   if (v === "clocks") fitBoard();
-  if (v === "schedule") renderSchedule();   // today's column may have moved on
+  if (v === "schedule") { sch.zone = "local"; renderSchedule(); }   // always opens in your time; today's column may have moved on
 }
 $(".views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); });
 
@@ -1568,35 +1645,38 @@ $("#schToday").addEventListener("click", () => schGo(0));
   lsSet(SCHK, JSON.stringify({from: f, to: t})); sch.focus = null; e.target.blur(); renderSchedule();
 }));
 $("#schCopy").addEventListener("click", async () => {
-  const ok = await copyText(schText(schSet()));
-  toast(ok ? "Schedule copied. Paste it where Kevin will see it." : "Couldn't copy. Select the text under What gets copied and press Ctrl+C.");
+  const ok = await copyText(copyOut());   // always Kevin's time
+  toast(ok ? "Schedule copied in Kevin's time (Eastern). Paste it where he will see it." : "Couldn't copy. Select the text under What gets copied and press Ctrl+C.");
 });
 $("#schFormat").addEventListener("click", e => { const b = e.target.closest("[data-fmt]"); if (b) { lsSet(SCHFMTK, b.dataset.fmt); renderSchedule(); } });
 $("#schClear").addEventListener("click", () => {
   if (sch.confirm !== "clear") { schAsk("clear"); return; }
-  sch.confirm = null; schStore(new Set()); renderSchedule(); toast("Week cleared");
+  sch.confirm = null; schEdit([...schView()], false); renderSchedule(); toast("Week cleared");
 });
 $("#schRepeat").addEventListener("click", () => {
-  const last = weekSlots(schDay(schMonday(), -7));
-  if (!last.length) return;
-  if (schSet().size && sch.confirm !== "repeat") { schAsk("repeat"); return; }
-  sch.confirm = null; schStore(new Set(last)); renderSchedule(); toast("Planned the same as last week");
+  const last = viewSet(tzOf(sch.zone), schDay(schMonday(), -7));
+  if (!last.size) return;
+  if (schView().size && sch.confirm !== "repeat") { schAsk("repeat"); return; }
+  sch.confirm = null; schEdit([...schView()], false); schEdit([...last], true); renderSchedule(); toast("Planned the same as last week");
 });
+$("#schZone").addEventListener("click", e => { const b = e.target.closest("[data-zone]"); if (b) { sch.zone = b.dataset.zone; sch.confirm = null; renderSchedule(); } });
 $("#schOpts").addEventListener("change", e => { if (e.target.dataset.opt) setOpt(e.target.dataset.opt, e.target.checked); });
 const schGrid = $("#schGrid");
 schGrid.addEventListener("pointerdown", e => {
   const c = e.target.closest(".sc"); if (!c || e.button > 0) return;
   e.preventDefault();
   const [d, m] = c.dataset.k.split("-").map(Number);
-  sch.drag = {d0: d, m0: m, d1: d, m1: m, add: !schSet().has(c.dataset.k)};
+  sch.drag = {d0: d, m0: m, d1: d, m1: m, add: !schView().has(c.dataset.k), x: e.clientX, y: e.clientY};
   sch.focus = c.dataset.k;
   schGrid.setPointerCapture(e.pointerId); schPreview();
 });
 schGrid.addEventListener("pointermove", e => {
   if (!sch.drag) return;
-  const el = document.elementFromPoint(e.clientX, e.clientY), c = el && el.closest && el.closest("#schGrid .sc"); if (!c) return;
-  const [d, m] = c.dataset.k.split("-").map(Number);
+  sch.drag.x = e.clientX; sch.drag.y = e.clientY;
+  const el = document.elementFromPoint(e.clientX, e.clientY), c = el && el.closest && el.closest("#schGrid .sc");
+  const [d, m] = c ? c.dataset.k.split("-").map(Number) : [sch.drag.d1, sch.drag.m1];
   if (d !== sch.drag.d1 || m !== sch.drag.m1) { sch.drag.d1 = d; sch.drag.m1 = m; schPreview(); }
+  else schTipMove();
 });
 schGrid.addEventListener("pointerup", () => schEnd(true));
 schGrid.addEventListener("pointercancel", () => schEnd(false));

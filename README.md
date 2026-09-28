@@ -118,11 +118,13 @@ These are **switched off unless you turn them on** in the **Extras** card at the
 **Weekly schedule.** Adds a **Schedule** tab for telling Kevin when you plan to work. It's only information: it doesn't start, stop or change any clock.
 
 - Drag across the half hours you plan to work. Start a drag on a filled slot to erase instead. With the keyboard, use the arrow keys, then Space.
+- While you drag, a small label by the pointer shows the days and times, like "Thu 2:30-4pm". Each planned block shows its times at the top.
+- **My time / Eastern (Kevin):** switches the grid between your time and Kevin's (Pennsylvania). The tab always opens in your time. The switch appears only when Kevin's time differs from yours. Daylight saving is handled automatically: EDT in summer, EST in winter.
 - Step through weeks with **‹ ›**. **Show … to …** picks which hours the grid shows.
 - The three boxes compare your plan with the time your clocks tracked: **Planned**, **Worked**, and how far ahead or behind you are.
 - A thin dark line on the grid shows where your clocks actually ran, next to what you planned.
 - **Same as last week** copies last week's plan. If this week already has a plan, it asks with a second click first.
-- **Copy schedule** copies the week. Under **What gets copied**, pick the format; the choice is remembered:
+- **Copy schedule** copies the week, **always in Kevin's time (Eastern)**, with a first line like "Eastern time (EDT)". Everything else in the tracker stays in your time. Under **What gets copied**, pick the format; the choice is remembered:
   - **Full:** one line per day, like "Monday → 9 AM to 1 PM, 2 PM to 5 PM", which pastes into two spreadsheet columns.
   - **Short:** planned days only, like "M:9am-1pm, 2-5pm", for a quick message.
 - **Clear week** needs a second click.

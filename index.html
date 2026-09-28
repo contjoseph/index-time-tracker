@@ -116,6 +116,13 @@
         <button type="button" id="schNext" aria-label="Next week"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
       </div>
       <button class="btn" id="schToday" type="button">This week</button>
+      <span class="zonebox" id="schZoneBox" hidden>
+        <span class="seg" id="schZone" role="group" aria-label="Show times in">
+          <button type="button" data-zone="local">My time</button>
+          <button type="button" data-zone="et">Eastern (Kevin)</button>
+        </span>
+        <small class="muted" id="schZoneHint"></small>
+      </span>
       <span class="hours">Show <select id="schFrom" aria-label="First hour shown"></select> to <select id="schTo" aria-label="Last hour shown"></select></span>
     </div>
     <div id="schKpis"></div>
@@ -126,7 +133,7 @@
   </section>
 
   <section class="card entries">
-    <div class="card-top"><h2>What gets copied</h2>
+    <div class="card-top"><h2>What gets copied <small>in Kevin's time (Eastern)</small></h2>
       <div class="seg" id="schFormat" role="group" aria-label="Copy format">
         <button type="button" data-fmt="full">Full</button>
         <button type="button" data-fmt="short">Short</button>
@@ -181,6 +188,7 @@
   <div id="invBody"></div>
 </dialog>
 <div id="toast" class="toast" hidden></div>
+<div id="schTip" class="schtip" hidden></div>
 <script src="reports.js"></script>
 <script src="app.js"></script>
 </body>
