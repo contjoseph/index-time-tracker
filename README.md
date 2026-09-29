@@ -75,6 +75,10 @@ When a clock may have run by mistake, an orange bar appears at the top and the t
   - **Stop them** at the moment you left.
 - **Still working?** When a clock has run for 2 hours without a check, the tracker asks. You can change the 2 hours, or pick **Never**.
 - **Tracker closed, or computer asleep or off** for more than 10 minutes with a clock running: choose **Keep the time**, or **Stop them** at the moment you left.
+- **Still on break?** So you don't come back to work with the break still on:
+  - 5 minutes into a break, the tracker asks. Choose **End break**, or **Not yet, ask again in 5, 10, 20 or 30 min**. The mini tracker has **End** and **Later**.
+  - With *Away detection* on, it asks as soon as you come back to the computer. While you're away, it waits quietly and doesn't chime.
+  - If you notice the question late, **End at 10:02, when I came back** restarts your clocks from the moment you came back, so no work time is lost.
 
 ## Mini tracker (Chrome or Edge)
 
@@ -158,13 +162,13 @@ These are **switched off unless you turn them on** in the **Extras** card at the
 This is for the person who shares the link. Everyone who opens the link gets their own, separate, private tracker.
 
 1. On github.com, click **New repository**. Name it `index-time-tracker`, set it to **Public**, and create it.
-2. Click **uploading an existing file**. Drag in these files and the **`lib`** folder, then click **Commit changes**:
-   - `index.html`, `app.js`, `reports.js`, `style.css`, `sw.js`, `manifest.webmanifest`, `icon.svg`
+2. Click **uploading an existing file**. Drag in these files and the **`lib`** and **`js`** folders, then click **Commit changes**:
+   - `index.html`, `style.css`, `sw.js`, `manifest.webmanifest`, `icon.svg`
    - `README.md` and `CLAUDE.md` are optional. They're instructions only.
 3. Go to **Settings → Pages**. Under *Branch*, pick `main` and `/ (root)`, then **Save**.
 4. After a minute or two, the tracker is live at `https://YOUR-USERNAME.github.io/index-time-tracker/`.
 
-> **Don't upload** the `sample report` and `mockups` folders, `weekly-schedule.html` (the old standalone page; the tracker has it built in now), the two `.txt` notes, or any real invoice, like `invoice 260914P.pdf`. A public repository can be seen by anyone, and invoices have your phone number, email and payment details on them.
+> **Don't upload** the `sample report`, `mockups`, `tests` and `docs` folders, `weekly-schedule.html` (the old standalone page; the tracker has it built in now), the two `.txt` notes, or any real invoice, like `invoice 260914P.pdf`. A public repository can be seen by anyone, and invoices have your phone number, email and payment details on them.
 
 **Updating later:** upload the changed files again on GitHub, replacing the old ones. The site updates within a few minutes, and everyone's saved time stays where it is.
 

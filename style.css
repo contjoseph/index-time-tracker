@@ -277,6 +277,12 @@ table{border-collapse:collapse;width:100%}
 .banner .btn{background:#fff;color:#17202A;border-color:#fff}
 .banner .btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.75)}
 .banner .btn.ghost:hover{background:rgba(255,255,255,.15)}
+/* "Still on break?": Not yet, ask again in 5 · 10 · 20 · 30 min (the last choice filled) */
+.banner .snooze{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600}
+.banner .snooze .sn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.banner .snooze button{border:1.5px solid rgba(255,255,255,.8);background:transparent;color:#fff;border-radius:8px;padding:4px 10px;font-weight:800;font-size:14px;min-width:38px}
+.banner .snooze button:hover{background:rgba(255,255,255,.15)}
+.banner .snooze button[aria-pressed="true"]{background:#fff;color:#17202A}
 .dlg{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:18px var(--pad);width:min(460px,calc(100% - 32px))}
 .dlg::backdrop{background:rgba(10,14,18,.55)}
 .dlg h2{margin:0 0 10px;font-size:18px;font-weight:800}

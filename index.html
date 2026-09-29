@@ -20,6 +20,8 @@
     <button class="btn" id="gapKeep" type="button">Keep the time</button>
     <button class="btn" id="gapTake" type="button" hidden></button>
     <button class="btn ghost" id="gapStop" type="button"></button>
+    <span class="snooze" id="gapSnooze" role="group" aria-label="Still on break: ask again in" hidden>Not yet, ask again in
+      <span class="sn"><button type="button" data-snooze="5">5</button><button type="button" data-snooze="10">10</button><button type="button" data-snooze="20">20</button><button type="button" data-snooze="30">30</button> min</span></span>
   </div>
 
   <nav class="views" role="tablist" aria-label="Show">
@@ -189,7 +191,6 @@
 </dialog>
 <div id="toast" class="toast" hidden></div>
 <div id="schTip" class="schtip" hidden></div>
-<script src="reports.js"></script>
-<script src="app.js"></script>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>
