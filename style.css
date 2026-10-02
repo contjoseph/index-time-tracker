@@ -173,7 +173,8 @@ select,input[type=date],input[type=time]{border:1px solid var(--line);border-rad
 .stepper button:hover:not(:disabled){background:var(--soft);color:var(--ink)}
 .stepper button:disabled{opacity:.35;cursor:default}
 .stepper .range{padding:7px 14px;border-left:1px solid var(--line);border-right:1px solid var(--line);font-weight:700;min-width:220px;text-align:center;white-space:nowrap}
-.stepper .range small{font-weight:600;color:var(--muted);margin-left:7px;font-size:13px}
+.stepper .range{min-height:52px;display:flex;flex-direction:column;justify-content:center}
+.stepper .range small{display:block;font-weight:600;color:var(--muted);font-size:12.5px;line-height:1.2}
 .custom{display:inline-flex;gap:8px;align-items:center;color:var(--muted);flex-wrap:wrap}
 .seg{display:inline-flex;background:var(--soft);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
 .seg button{border:0;background:none;border-radius:7px;padding:5px 11px;font-weight:600;font-size:13.5px;color:var(--muted)}
