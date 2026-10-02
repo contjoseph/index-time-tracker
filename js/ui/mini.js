@@ -5,7 +5,7 @@ import {P, S, proj} from "../data/store.js";
 import {tick} from "../main.js";
 import {toggleBreak} from "./clocks.js";
 import {$, PAUSE, PLAY, now, setHTML, toast} from "./dom.js";
-import {endBreakAt, gap, keepGap, snoozeBreak, stopAtGap, takeOutAway, unlockSound} from "./safety.js";
+import {endBreakAt, gap, keepGap, snoozeBreak, stopAtGap, takeOutAway, unlockSound, urgent} from "./safety.js";
 import {applyTheme} from "./settings.js";
 
 /* ---------- mini tracker: a small window that stays on top of other windows (Chrome and Edge) ---------- */
@@ -38,7 +38,7 @@ export function renderMini(t, iv, b) {   // one strip: today's hours and BREAK, 
   const d = mini.document, box = d.getElementById("m"); if (!box) return;
   const btn = (k, label, cls = "") => `<button type="button" class="sbtn${cls}" data-m="${k}">${label}</button>`;
   let html;
-  if (gap) {
+  if (urgent()) {   // the quiet "close this book?" question stays on the main page
     const q = gap.kind === "check" ? "Still working?" : gap.kind === "break" ? `On break ${fmt(t - gap.from)}?` : gap.kind === "plan" ? "Plan ended" : gap.kind === "away" ? `Away ${fmt(gap.until - gap.from)}` : "Tracker was off";
     html = `<div class="strip ask"><p>${q}</p>${gap.kind === "check" ? btn("keep", "Yes") + btn("stop", "No", " ghost")
       : gap.kind === "break" ? btn("endbrk", "End", " go") + btn("later", "Later", " ghost")

@@ -22,11 +22,13 @@ When a clock is running and you're on another tab, the **Clocks** tab shows toda
 - **More than one clock** can run at once, for example Detailing on one book while Flipping another. Your **worked hours** count that time once. Each book still gets its full clock time for **project time** (see *Reports*).
 - **START BREAK** pauses every running clock. **END BREAK** starts the same clocks again.
 - **Today / This week / This month** at the top show the hours you actually worked.
-- **New project:** click **+ New** beside *Project* at the top of the clocks, type its name and press **Enter**.
+- **New project:** click **+ New** beside *Project* at the top of the clocks, type its name and press **Enter**. It appears at the top of the list.
+- **Order of the projects:** books with a running clock come first, with a soft green background and a green edge. Then come the rest, most recently used first, so old books sink to the bottom. Rows move as little as possible: when you start a clock on a book lower down, it moves up under the running books once your mouse leaves the clocks (so it doesn't slide away while you click). If only running books are above it, it stays put. Stopping a clock never moves a row.
 - **Short names:** a book can have a short name (up to 18 characters) for the Clocks tab, like "SleepOUP". Set it when you create the book, or click the book's name to rename it. Reports, time entries, Excel, PDF, invoices and the Basecamp summary always use the full name. Hover over a short name to see the full one.
 - **Embedding:** for the odd book that needs embedding, click the book's **⋯** and choose **Add Embedding clock**. A small **Embed** clock appears under that book's name; click it to start and stop, like any clock. While it runs, it fills up once a minute. It counts in worked hours, project time and invoices ("Embedding"). Reports show an Embedding column only for periods that have embedding time. **Remove Embedding clock** works only while the book has no embedding time, so none can be lost.
-- **Up to 5 projects show at once.** With more, scroll the list of projects; the activity names stay at the top.
-- **In the installed app, the window fits itself** to your projects when it opens and when you add, close or delete a project. The rest of the time it stays the size you give it. A maximised window is left alone.
+- **As many projects show as fit in the window.** With more, scroll the list of projects; the activity names stay at the top.
+- **In the installed app, the window fits itself** to all your projects (up to the height of the screen) when it opens and when you add, close or delete a project. The rest of the time it stays the size you give it. A maximised window is left alone.
+- **Window size** (installed app only): the window icon beside **+ New** picks **Fit my projects** (the default), **Fill the screen**, or **Keep my size** (the tracker never resizes the window). For the smallest view, use the **Mini tracker**.
 - **Rename, close or delete a project:** click the **⋯** next to its name. You can also click the name itself to rename it.
 - A click shorter than 5 seconds isn't saved, so an accidental double click doesn't leave a tiny entry behind.
 
@@ -64,6 +66,11 @@ When a book is done, click the **⋯** next to its name, then **Close project**,
 - **keeps all its time.** It still counts in Worked hours and Project time, and it's listed on the **Closed projects** tab.
 
 On the Closed projects tab, the **⋯** next to each project has **Copy summary** and **Reopen project**.
+
+**Books you haven't touched for a week.** Once a day, the orange bar asks about each open book with no time for 7 days, one at a time: "SleepOUP has had no time for 9 days. Close it?" It's a quiet question: no chime, no pop-up, no blinking. It waits while you're on break, and a question about your clocks always comes first.
+- **Close it:** closes the book as above (summary and Basecamp reminder).
+- **Keep open:** doesn't ask about that book for another week.
+- **Not now:** asks again tomorrow.
 
 ## Not forgetting to clock out
 
@@ -127,6 +134,7 @@ These are **switched off unless you turn them on** in the **Extras** card at the
 - Step through weeks with **‹ ›**. **Show … to …** picks which hours the grid shows.
 - The three boxes compare your plan with the time your clocks tracked: **Planned**, **Worked**, and how far ahead or behind you are.
 - A thin dark line on the grid shows where your clocks actually ran, next to what you planned.
+- Time that has passed gets a faint grey veil, and today's column is veiled down to the current minute, with a thin orange line at *now*. So you can see at a glance how much of the week is left.
 - **Same as last week** copies last week's plan. If this week already has a plan, it asks with a second click first.
 - **Copy schedule** copies the week, **always in Kevin's time (Eastern)**, with a first line like "Eastern time (EDT)". Everything else in the tracker stays in your time. Under **What gets copied**, pick the format; the choice is remembered:
   - **Full:** one line per day, like "Monday → 9 AM to 1 PM, 2 PM to 5 PM", which pastes into two spreadsheet columns.

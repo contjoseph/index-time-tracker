@@ -7,7 +7,7 @@ import {DAYS, ET, SLOT, SLOTMS, aheadText, etGap, schBlocks, schDay, schH, short
 import {P, S, intervals, save} from "../data/store.js";
 import {$, CONFIRM_FOR, copyText, esc, kpi, now, setHTML, toast} from "./dom.js";
 import {opt, setOpt} from "./extras.js";
-import {gap, notify, setGap} from "./safety.js";
+import {notify, setGap, urgent} from "./safety.js";
 
 /* ---------- weekly schedule: when you plan to work, to tell Kevin (informative, not binding) ---------- */
 // Half-hour slots keyed "day-minute" (day 0 = Monday, 540 = 9:00), stored per week in S.schedule, so the
@@ -62,20 +62,24 @@ export function renderSchedule() {
 
   // The grid: a corner, 7 day headings, then one row per half hour. Each block shows its times in its first
   // visible slot. A slot where a clock ran gets a thin line (--ws/--we trim it to the part that was worked).
+  // Time that has passed gets a faint veil: whole slots before now, and the current slot down to the minute (--pf).
   const did = future ? [] : workedStretches(a, Math.min(end, t)), focus = sch.focus || `0-${from * 60}`;
   const labels = {};
   DAYS.forEach((_, d) => schBlocks(set, d).forEach(([s, e]) => { const at = Math.max(s, from * 60); if (at < e && at < to * 60) labels[`${d}-${at}`] = shortRange([s, e]); }));
   let h = `<div class="sh"></div>` + DAYS.map((n, d) => {
     const day = schDay(mon, d), mins = schBlocks(set, d).reduce((s, [x, y]) => s + y - x, 0);
-    return `<div class="sh${dayKey(day) === today ? " today" : ""}" role="columnheader"><b>${WD(day)}</b><span>${dnum(day)} ${MO(day)}</span><em>${mins ? schH(mins * 60000) : ""}</em></div>`;
+    return `<div class="sh${dayKey(day) === today ? " today" : ""}${vts(mon, d + 1, 0, tz) <= t ? " past" : ""}" role="columnheader"><b>${WD(day)}</b><span>${dnum(day)} ${MO(day)}</span><em>${mins ? schH(mins * 60000) : ""}</em></div>`;
   }).join("");
   for (let m = from * 60; m < to * 60; m += SLOT) {
     const half = m % 60 ? " half" : "";
     h += `<div class="hr${half}">${half ? "" : slotTime(m)}</div>` + DAYS.map((n, d) => {
       const k = `${d}-${m}`, on = set.has(k), s = vts(mon, d, m, tz), e = s + SLOTMS;
       const hit = did.filter(x => x[1] > s && x[0] < e);
-      const wv = hit.length ? ` w" style="--ws:${((Math.max(hit[0][0], s) - s) / SLOTMS).toFixed(3)};--we:${((e - Math.min(hit[hit.length - 1][1], e)) / SLOTMS).toFixed(3)}` : "";
-      return `<div class="sc${half}${on ? " on" : ""}${dayKey(schDay(mon, d)) === today ? " today" : ""}${wv}" data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}">${labels[k] ? `<span class="blab">${labels[k]}</span>` : ""}</div>`;
+      const st = [];
+      if (hit.length) st.push(`--ws:${((Math.max(hit[0][0], s) - s) / SLOTMS).toFixed(3)};--we:${((e - Math.min(hit[hit.length - 1][1], e)) / SLOTMS).toFixed(3)}`);
+      if (s < t && t < e) st.push(`--pf:${((t - s) / SLOTMS).toFixed(3)}`);
+      const cls = `${half}${on ? " on" : ""}${dayKey(schDay(mon, d)) === today ? " today" : ""}${e <= t ? " past" : s < t ? " now" : ""}${hit.length ? " w" : ""}`;
+      return `<div class="sc${cls}"${st.length ? ` style="${st.join(";")}"` : ""} data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}">${labels[k] ? `<span class="blab">${labels[k]}</span>` : ""}</div>`;
     }).join("");
   }
   setHTML($("#schGrid"), h);
@@ -139,7 +143,7 @@ export function schEnd(commit) {
 export function schToggle(k) { schEdit([k], !schView().has(k)); sch.focus = k; renderSchedule(); $(`#schGrid [data-k="${k}"]`).focus(); }
 // Reminder: a planned block has just ended (in the last 15 minutes) and a clock that started before it is still running
 export function checkPlanEnd(t) {
-  if (gap || !opt("schedule") || !schOpt("planRemind")) return;
+  if (urgent() || !opt("schedule") || !schOpt("planRemind")) return;
   const e = Sch.planEndDue(S.schedule, S.running, t, P.get("plan-told"), bounds().week);
   if (!e) return;
   P.set("plan-told", e);

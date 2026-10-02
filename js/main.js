@@ -14,7 +14,7 @@ import {closeMenu, initMenu, menu} from "./ui/menu.js";
 import {initMini, renderMini, renderMiniBtn} from "./ui/mini.js";
 import {hideNote, initNotes} from "./ui/notes.js";
 import {initReports, lastReport, renderReport} from "./ui/reports.js";
-import {gap, heartbeat, initSafety, renderGap, resumeAway, tickSafety, tickTitle} from "./ui/safety.js";
+import {heartbeat, initSafety, renderGap, resumeAway, tickSafety, tickTitle, urgent} from "./ui/safety.js";
 import {checkPlanEnd, initSchedule, renderSchedule, sch, schEnd} from "./ui/schedule.js";
 import {applyTheme, initSettings, renderSafe} from "./ui/settings.js";
 
@@ -25,14 +25,16 @@ export function render() {
   fillSelects(); renderReport(); renderLog(); renderSafe(); renderExtras(); renderSchedule();
   tick();
 }
+let schAt = 0;
 export function tick() {
   const t = now(), iv = intervals(), b = bounds();
   tickSafety(t); checkPlanEnd(t); renderGap(t);
   tickClocks(t, iv, b);
   if (S.running.length && t - lastReport > 60000) renderReport();   // keep the report's totals current while clocks run
+  if (t - schAt >= 60000 && !sch.drag) { schAt = t; if (!$('[data-pane="schedule"]').hidden) renderSchedule(); }   // the "time passed" veil moves on
   tickTitle(t, iv, b);
   renderMini(t, iv, b);
-  badge(gap ? (Math.floor(t / 1000) % 2 ? S.running.length : 0) : S.breakStart ? "dot" : S.running.length);
+  badge(urgent() ? (Math.floor(t / 1000) % 2 ? S.running.length : 0) : S.breakStart ? "dot" : S.running.length);
 }
 // The installed app's taskbar icon: the number of running clocks, a dot on break, blinking while a question waits
 let lastBadge = null;

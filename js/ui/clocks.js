@@ -2,6 +2,7 @@
    the clock faces, the dashboard, and fitting the view and the installed app's window. */
 import {clockSum, dec, fmt, loc, worked} from "../core/time.js";
 import {ACTIVITIES, MAIN} from "../domain/activities.js";
+import {initialOrder, placeStarted} from "../domain/board.js";
 import {schDay, schH} from "../domain/schedule.js";
 import {P, S, commit, hasExtra, intervals, proj, save, shortName, uid} from "../data/store.js";
 import {render} from "../main.js";
@@ -27,7 +28,7 @@ export function toggleClock(p, a) {
   const r = S.running.find(x => same(x, p, a));
   let stopped = null;
   if (r) { stopped = record(r, now()); S.running = S.running.filter(x => x !== r); }
-  else S.running.push({projectId: p, activityId: a, start: now()});
+  else { S.running.push({projectId: p, activityId: a, start: now()}); started.push(p); if (!overBoard) placeRows(); }
   commit();
   if (stopped && opt("notes")) askNote(stopped);
 }
@@ -73,6 +74,27 @@ export function startRename(id) {
 /* ---------- closing a finished project ---------- */
 // A closed project leaves the clock board but keeps all its time; it moves to the Closed projects tab.
 export const openProjects = () => S.projects.filter(p => !p.closed);
+/* ---------- the order of the board ---------- */
+// Running books first, then the most recently used (worked out when the tracker opens). After that, rows move as
+// little as possible: a new or reopened book goes on top, and a book whose clock starts below a book that isn't
+// running moves up under the running ones. That move waits until the mouse leaves the board, so the row you are
+// clicking doesn't slide away under the pointer. Stopping a clock never moves a row. Kept for this visit only.
+export let order = null, started = [], overBoard = false;
+export function boardProjects() {
+  const open = openProjects();
+  if (!order) order = initialOrder(open, S.entries, S.running);
+  const fresh = open.filter(p => !order.includes(p.id));
+  const ids = new Set(open.map(p => p.id));
+  order = [...initialOrder(fresh, S.entries, S.running), ...order.filter(id => ids.has(id))];
+  return order.map(proj);
+}
+export function placeRows() {   // move the books whose clocks started while the mouse was on the board
+  if (!started.length) return false;
+  const on = new Set(S.running.map(r => r.projectId)), was = order;
+  for (const id of started) if (order && on.has(id)) order = placeStarted(order, id, on);
+  started = [];
+  return order !== was;
+}
 export function projectTotals(p) {
   const mine = S.entries.filter(e => e.projectId === p.id);
   const acts = ACTIVITIES.map(a => ({id: a.id, name: a.name, ms: mine.filter(e => e.activityId === a.id).reduce((s, e) => s + e.end - e.start, 0)}));
@@ -142,22 +164,21 @@ export const face = (ms, key) => `<div class="face"><svg viewBox="0 0 80 80" ari
 export const chipFace = (ms, key) => `<svg class="xf" viewBox="0 0 80 80" aria-hidden="true"><circle class="rim" cx="40" cy="40" r="34"/><line class="hand" data-hand="${key}" x1="40" y1="40" x2="40" y2="16" style="transform:rotate(${angle(ms)}deg)"/><circle class="hub" cx="40" cy="40" r="6"/></svg>`;
 
 /* ---------- fitting the Clocks view to your projects ---------- */
-// The board shows up to 5 projects, then scrolls (the heading row stays put). It's never taller than the screen.
-// The installed app's window then fits itself around the page, but only when it opens and when the number of
-// projects changes, so it doesn't jump about while you work or fight you when you size it yourself.
-export const FIT_ROWS = 5;
+// The board shows every project that fits in the window, then scrolls (the heading row stays put).
+// The installed app's window fits itself around the page (all projects, up to the screen's height), but only
+// when it opens and when the number of projects changes, so it doesn't jump about while you work or fight you
+// when you size it yourself. The window-size choice in the board's heading can make it fill the screen, or
+// leave the window alone ("win-size": fit / fill / mine).
 export let fitCount = -1;
 export const clocksShown = () => !$('[data-pane="clocks"]').hidden;
-export function fitBoard() {
+export const installed = () => matchMedia("(display-mode: standalone)").matches;
+export function fitBoard(toScreen) {   // toScreen: room up to the screen's height, for the window about to grow
   const bd = $("#board");
   bd.style.maxHeight = "";
   if (!clocksShown() || innerWidth <= 760) return;   // narrow windows and phones scroll the page instead
-  const head = bd.querySelector(".row.head"), rows = [...bd.querySelectorAll(".row:not(.head)")];
-  if (!rows.length) return;
-  const want = (head ? head.offsetHeight : 0) + rows.slice(0, FIT_ROWS).reduce((s, r) => s + r.offsetHeight, 0) + 2;
   const rest = $(".wrap").offsetHeight - bd.offsetHeight;                   // everything on the page but the board
-  const room = screen.availHeight - (outerHeight - innerHeight) - rest;    // what fits on this screen
-  const max = Math.max(160, Math.min(want, room));
+  const room = (toScreen ? screen.availHeight - (outerHeight - innerHeight) : innerHeight) - rest;
+  const max = Math.max(160, room);
   if (max < bd.scrollHeight) bd.style.maxHeight = max + "px";
 }
 export let fitUntil = 0, frameH = 0, resizedAt = 0;
@@ -167,20 +188,31 @@ export function fitWindow() {   // fits now, and again if the page settles to a 
 }
 if ("ResizeObserver" in window) new ResizeObserver(() => { if (now() < fitUntil) fitNow(); }).observe($(".wrap"));
 export function fitNow() {
-  if (!matchMedia("(display-mode: standalone)").matches || !clocksShown()) return;     // only the installed app
-  if (outerWidth >= screen.availWidth - 8 && outerHeight >= screen.availHeight - 8) return;   // maximised: leave it
-  fitBoard();
+  if (!installed() || !clocksShown()) return;     // only the installed app
+  const mode = P.get("win-size");
+  if (mode === "mine") return;
+  if (mode === "fill") {
+    try { window.moveTo(screen.availLeft || 0, screen.availTop || 0); resizeTo(screen.availWidth, screen.availHeight); } catch {}
+    fitBoard(); return;
+  }
+  if (outerWidth >= screen.availWidth - 8 && outerHeight >= screen.availHeight - 8) { fitBoard(); return; }   // maximised: leave it
+  fitBoard(true);
   // The title bar's height, measured only when no resize of ours is under way (sizes lag for a moment after one)
   if (!frameH || now() - resizedAt > 600) frameH = outerHeight - innerHeight;
   const h = frameH + $(".wrap").offsetHeight;
   if (Math.abs(h - outerHeight) > 1) { resizedAt = now(); try { resizeTo(outerWidth, h); } catch {} }
 }
+export function setWinSize(mode) {
+  P.set("win-size", mode);
+  if (mode !== "mine") fitWindow();
+  toast(mode === "fill" ? "The window will fill the screen" : mode === "fit" ? "The window will fit your projects" : "The window will stay the size you make it");
+}
 
 export function renderBoard() {
   const iv = intervals();
-  let h = `<div class="row head" style="--n:${MAIN.length}"><div class="hp">Project<button type="button" class="btn ghost addp" data-add="1" title="Create a new project">+ New</button></div>${MAIN.map((a, i) => `<div class="ah" style="--c:var(--a${i % 7})">${esc(a.name)}</div>`).join("")}<div>Project total</div></div>`;
+  let h = `<div class="row head" style="--n:${MAIN.length}"><div class="hp">Project<button type="button" class="btn ghost addp" data-add="1" title="Create a new project">+ New</button>${installed() ? `<button type="button" class="btn icon winsz" data-menu="winsize|" aria-haspopup="menu" aria-label="Window size" title="Window size">${I.win}</button>` : ""}</div>${MAIN.map((a, i) => `<div class="ah" style="--c:var(--a${i % 7})">${esc(a.name)}</div>`).join("")}<div>Project total</div></div>`;
   if (!openProjects().length) h += `<div class="empty">${S.projects.length ? "All your projects are closed. Click <b>+ New</b> to create one." : "Click <b>+ New</b> to create your first project, then click any clock to start tracking."}</div>`;
-  for (const p of openProjects()) {
+  for (const p of boardProjects()) {
     const mine = iv.filter(x => x.p === p.id);
     const anyOn = S.running.some(r => r.projectId === p.id);
     const name = editing === p.id
@@ -204,7 +236,7 @@ export function renderBoard() {
         ${on ? `<span class="xfill" style="animation-delay:-${((ms / 1000) % 60).toFixed(1)}s"></span>` : ""}${chipFace(ms, key)}<span class="xn">${esc(a.short)}</span><span class="xt" data-t="${key}" data-hm="1">${fmt(ms)}</span></button>`;
     }).join("");
     const tot = clockSum(0, mine);
-    h += `<div class="row" style="--n:${MAIN.length}"><div class="pn">${name}${chips}</div>${clocks}
+    h += `<div class="row${anyOn ? " run" : ""}" style="--n:${MAIN.length}"><div class="pn">${name}${chips}</div>${clocks}
       <div class="tot">${face(tot, "tot|" + p.id)}<span class="lab">Total</span><span class="t" data-t="tot|${p.id}">${fmt(tot, anyOn)}</span></div></div>`;
   }
   $("#board").innerHTML = h;
@@ -264,6 +296,9 @@ $("#board").addEventListener("click", e => {
   else if (d.cancel) { editing = null; render(); }
   else if (d.add) showAddProject(true);
 });
+// Rows waiting to move (a clock started while the mouse was on the board) move once it leaves
+$("#board").addEventListener("pointerenter", () => { overBoard = true; });
+$("#board").addEventListener("pointerleave", () => { overBoard = false; if (placeRows()) renderBoard(); });
 $("#board").addEventListener("submit", e => {
   e.preventDefault();
   const f = e.target, p = proj(f.dataset.rename), n = f.elements.n.value.trim(), sh = f.elements.s.value.trim();

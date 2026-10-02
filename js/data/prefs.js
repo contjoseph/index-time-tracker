@@ -19,6 +19,11 @@ const PREFS = {
   "plan-told":   num(0),            // end time of the last planned block asked about
   "break-ask":   num(0),            // when to ask "Still on break?" next (0 = 5 min after the break started)
   "break-snooze": {get: v => [5, 10, 20, 30].includes(+v) ? +v : 5, set: x => x && +x !== 5 ? String(+x) : null},   // last "ask again in" choice (minutes)
+  // quiet books ("no time for a week, close it?")
+  "quiet-asked": num(0),            // start of the day the question was last finished or put off ("Not now")
+  "quiet-keep":  json(x => x && typeof x === "object" && !Array.isArray(x), {}),   // {projectId: don't ask before}
+  // the installed app's window: fit the projects, fill the screen, or leave it as you sized it
+  "win-size":    oneOf(["fit", "fill", "mine"], "fit"),
   // reports
   "unit":        oneOf(["week", "month", "year", "all", "custom"], "week"),
   "tab":         oneOf(["worked", "project", "closed"], "worked"),
