@@ -28,7 +28,6 @@ When a clock is running and you're on another tab, the **Clocks** tab shows toda
 - **Embedding:** for the odd book that needs embedding, click the book's **⋯** and choose **Add Embedding clock**. A small **Embed** clock appears under that book's name; click it to start and stop, like any clock. While it runs, it fills up once a minute. It counts in worked hours, project time and invoices ("Embedding"). Reports show an Embedding column only for periods that have embedding time. **Remove Embedding clock** works only while the book has no embedding time, so none can be lost.
 - **As many projects show as fit in the window.** With more, scroll the list of projects; the activity names stay at the top.
 - **In the installed app, the window fits itself** to all your projects (up to the height of the screen) when it opens and when you add, close or delete a project. The rest of the time it stays the size you give it. A maximised window is left alone.
-- **Window size** (installed app only): the window icon beside **+ New** picks **Fit my projects** (the default), **Fill the screen**, or **Keep my size** (the tracker never resizes the window). For the smallest view, use the **Mini tracker**.
 - **Rename, close or delete a project:** click the **⋯** next to its name. You can also click the name itself to rename it.
 - A click shorter than 5 seconds isn't saved, so an accidental double click doesn't leave a tiny entry behind.
 
@@ -134,7 +133,7 @@ These are **switched off unless you turn them on** in the **Extras** card at the
 - Step through weeks with **‹ ›**. **Show … to …** picks which hours the grid shows.
 - The three boxes compare your plan with the time your clocks tracked: **Planned**, **Worked**, and how far ahead or behind you are.
 - A thin dark line on the grid shows where your clocks actually ran, next to what you planned.
-- Time that has passed gets a faint grey veil, and today's column is veiled down to the current minute, with a thin orange line at *now*. So you can see at a glance how much of the week is left.
+- Planned time shows as soft teal blocks with rounded corners. Time that has passed is covered with light sand-coloured stripes, right down to the current minute today, where a dark line and the time in the hours column mark *now*. So at a glance you see what's done and what's next.
 - **Same as last week** copies last week's plan. If this week already has a plan, it asks with a second click first.
 - **Copy schedule** copies the week, **always in Kevin's time (Eastern)**, with a first line like "Eastern time (EDT)". Everything else in the tracker stays in your time. Under **What gets copied**, pick the format; the choice is remembered:
   - **Full:** one line per day, like "Monday → 9 AM to 1 PM, 2 PM to 5 PM", which pastes into two spreadsheet columns.

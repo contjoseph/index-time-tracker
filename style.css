@@ -3,7 +3,10 @@
   --danger:#B23A3A; --focus:#2E63B8; --brk:#C4581F; --ok:#2D8A6C;
   --a0:#3B6EA8; --a1:#7657A8; --a2:#2D8A6C; --a3:#A87A1E; --a4:#AE4A67; --a5:#4F7F8C; --a6:#8C5A3C;
   --note:#FFF6E8; --noteline:#F0D6AE; --edge:#000;          /* --edge: the raised edge under START BREAK */
-  --veil:rgba(23,32,42,.07);                                  /* --veil: time that has passed, on the Schedule */
+  /* Schedule: --plan the planned blocks (teal, kept apart from the running green), --plan-ink its text,
+     --veil the sand hatching over time that has passed */
+  --plan:#2B95A3; --plan-ink:#1D6E79;
+  --veil:repeating-linear-gradient(135deg,rgba(150,112,50,.34) 0 1.5px,rgba(176,140,80,.13) 1.5px 6px);
   --pad:20px;                                   /* one inner margin for every card */
   color-scheme:light;
 }
@@ -13,7 +16,9 @@
     --bg:#11161C; --surface:#19212A; --ink:#E5E9ED; --muted:#98A3AF; --line:#2B3540; --soft:#222B35;
     --danger:#E07070; --focus:#7FA8EA; --brk:#E8854F; --ok:#5DBB99;
     --a0:#6F9BD6; --a1:#A58AD6; --a2:#5DBB99; --a3:#D4A64A; --a4:#D97A95; --a5:#7FB0BD; --a6:#C08A68;
-    --note:#2A2419; --noteline:#4A3D26; --edge:#98A3AF; --veil:rgba(0,0,0,.28);
+    --note:#2A2419; --noteline:#4A3D26; --edge:#98A3AF;
+    --plan:#5BB8C6; --plan-ink:#86D3DE;
+    --veil:repeating-linear-gradient(135deg,rgba(205,170,110,.17) 0 1.5px,rgba(20,12,0,.40) 1.5px 6px);
     color-scheme:dark;
   }
 }
@@ -21,7 +26,9 @@
   --bg:#11161C; --surface:#19212A; --ink:#E5E9ED; --muted:#98A3AF; --line:#2B3540; --soft:#222B35;
   --danger:#E07070; --focus:#7FA8EA; --brk:#E8854F; --ok:#5DBB99;
   --a0:#6F9BD6; --a1:#A58AD6; --a2:#5DBB99; --a3:#D4A64A; --a4:#D97A95; --a5:#7FB0BD; --a6:#C08A68;
-  --note:#2A2419; --noteline:#4A3D26; --edge:#98A3AF; --veil:rgba(0,0,0,.28);
+  --note:#2A2419; --noteline:#4A3D26; --edge:#98A3AF;
+    --plan:#5BB8C6; --plan-ink:#86D3DE;
+    --veil:repeating-linear-gradient(135deg,rgba(205,170,110,.17) 0 1.5px,rgba(20,12,0,.40) 1.5px 6px);
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -92,7 +99,6 @@ button,label.btn{cursor:pointer}
 .row.head .hp{display:flex;align-items:center;gap:8px}
 .row.head .addp{padding:2px 8px;font-size:13px;font-weight:700;border-radius:7px;color:var(--muted)}
 .row.head .ah{color:var(--c)}
-.row.head .winsz{margin-left:-4px;color:var(--muted)}
 .row.run{background:color-mix(in srgb,var(--ok) 7%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}   /* a book with a clock running */
 .row.head > div{padding:8px 6px;text-align:center;line-height:1.2}
 .row.head > div:first-child{text-align:left;padding-left:var(--pad)}
@@ -386,29 +392,34 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
 .sgrid .sh:first-child{border-left:0}
 .sgrid .sh b{display:block;font-weight:800}
 .sgrid .sh span{display:block;font-size:12.5px;color:var(--muted)}
-.sgrid .sh em{display:block;font-style:normal;font-size:12.5px;font-weight:800;color:var(--ok);min-height:1.25em}
-.sgrid .today{background:var(--note)}
-.sgrid .hr{font-size:12px;font-weight:600;color:var(--muted);text-align:right;padding:2px 8px 0 0;border-top:1px solid var(--line);height:22px;line-height:1}
+.sgrid .sh em{display:block;font-style:normal;font-size:12.5px;font-weight:800;color:var(--plan-ink);min-height:1.25em}
+.sgrid .sh.today b::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ink);margin-right:5px;vertical-align:2px}
+.sgrid .hr{font-size:12px;font-weight:600;color:var(--muted);text-align:right;padding:2px 8px 0 0;border-top:1px solid var(--line);height:22px;line-height:1;position:relative}
+.sgrid .hr .nowtag{position:absolute;right:4px;top:calc(var(--pf,0) * 100% - 9px);background:var(--ink);color:var(--surface);font-size:11px;font-weight:800;line-height:1.3;border-radius:5px;padding:1px 5px;z-index:3;pointer-events:none}
 .sgrid .sc{border-top:1px solid var(--line);border-left:1px solid var(--line);height:22px;cursor:pointer;position:relative}
 /* where a clock ran: a thin line down the right of the slot, trimmed to the part of the half hour worked */
-.sgrid .sc.w::after{content:"";position:absolute;right:5px;width:5px;top:calc(var(--ws,0) * 100% - 1px);bottom:calc(var(--we,0) * 100%);background:var(--ink);box-shadow:-1.5px 0 0 var(--surface),1.5px 0 0 var(--surface);pointer-events:none}
-/* time that has passed: a faint veil, and in the current half hour down to the minute, with a thin "now" edge */
-.sgrid .sc.past::before,.sgrid .sc.now::before{content:"";position:absolute;inset:0;background:var(--veil);pointer-events:none}
-.sgrid .sc.now::before{bottom:auto;height:calc(var(--pf,0) * 100%);box-shadow:0 1.5px 0 var(--brk)}
-.sgrid .sh.past b,.sgrid .sh.past span{opacity:.6}
+.sgrid .sc.w::after{z-index:2;content:"";position:absolute;right:5px;width:5px;top:calc(var(--ws,0) * 100% - 1px);bottom:calc(var(--we,0) * 100%);background:var(--ink);box-shadow:-1.5px 0 0 var(--surface),1.5px 0 0 var(--surface);pointer-events:none}
+/* time that has passed: sand hatching, and in the current half hour down to the minute, with a line at now */
+.sgrid .sc.past::before,.sgrid .sc.now::before{content:"";position:absolute;inset:-1px 0 0;background:var(--veil);background-attachment:fixed;pointer-events:none;z-index:1}   /* fixed: the hatching runs on unbroken from slot to slot */
+.sgrid .sc.now::before{bottom:auto;height:calc(var(--pf,0) * 100% + 1px);box-shadow:0 2px 0 var(--ink)}
+.sgrid .sh.past b,.sgrid .sh.past span,.sgrid .sh.past em{opacity:.55}
 .sgrid .half{border-top-style:dashed}
 .sgrid .hr.half{border-top-color:transparent}
 .sgrid .sc:hover{background:var(--soft)}
-/* planned: a soft tint with a solid edge down the left, calm in both themes */
-.sgrid .sc.on{background:color-mix(in srgb,var(--ok) 26%,var(--surface));border-top-color:color-mix(in srgb,var(--ok) 40%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}
-.sgrid .sc.add{background:color-mix(in srgb,var(--ok) 42%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}
-.sgrid .sc.on.del{background:var(--soft);box-shadow:none}
+/* planned: one soft, rounded block per stretch of time (.pb in each slot; .bt and .bb round its ends) */
+.sgrid .pb{position:absolute;left:3px;right:3px;top:-1px;bottom:0;background:color-mix(in srgb,var(--plan) 24%,var(--surface));pointer-events:none}
+.sgrid .bt .pb{top:2px;border-radius:7px 7px 0 0}
+.sgrid .bb .pb{bottom:2px;border-radius:0 0 7px 7px}
+.sgrid .bt.bb .pb{border-radius:7px}
+.sgrid .sc.add{background:color-mix(in srgb,var(--plan) 38%,var(--surface))}
+.sgrid .sc.on.del .pb{opacity:.3}
 /* each block's times, in its first visible slot */
-.sgrid .blab{position:absolute;left:8px;top:3px;max-width:calc(100% - 22px);font-size:11.5px;font-weight:700;line-height:1.2;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.sgrid .blab{z-index:2;position:absolute;left:9px;top:4px;max-width:calc(100% - 22px);font-size:11.5px;font-weight:700;line-height:1.2;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .sgrid .sc:focus-visible{outline-offset:-2px}
 .sched .rnote{border-top:1px solid var(--line)}
 .slegend{padding-bottom:10px}
-.sk{display:inline-block;flex:none;width:16px;height:12px;border-radius:2px;background:color-mix(in srgb,var(--ok) 26%,var(--surface));box-shadow:inset 3px 0 0 var(--ok)}
+.sk{display:inline-block;flex:none;width:16px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--plan) 24%,var(--surface))}
+.sk.gone{background:var(--veil);outline:1px solid var(--line);border-radius:2px}
 .sk.did{width:5px;height:14px;border-radius:0;background:var(--ink)}
 .scopy{padding:12px var(--pad) 4px;border-top:1px solid var(--line);font-size:15px;line-height:1.75}
 .scopy p{margin:0;overflow-wrap:anywhere}

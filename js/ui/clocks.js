@@ -167,11 +167,8 @@ export const chipFace = (ms, key) => `<svg class="xf" viewBox="0 0 80 80" aria-h
 // The board shows every project that fits in the window, then scrolls (the heading row stays put).
 // The installed app's window fits itself around the page (all projects, up to the screen's height), but only
 // when it opens and when the number of projects changes, so it doesn't jump about while you work or fight you
-// when you size it yourself. The window-size choice in the board's heading can make it fill the screen, or
-// leave the window alone ("win-size": fit / fill / mine).
 export let fitCount = -1;
 export const clocksShown = () => !$('[data-pane="clocks"]').hidden;
-export const installed = () => matchMedia("(display-mode: standalone)").matches;
 export function fitBoard(toScreen) {   // toScreen: room up to the screen's height, for the window about to grow
   const bd = $("#board");
   bd.style.maxHeight = "";
@@ -188,13 +185,7 @@ export function fitWindow() {   // fits now, and again if the page settles to a 
 }
 if ("ResizeObserver" in window) new ResizeObserver(() => { if (now() < fitUntil) fitNow(); }).observe($(".wrap"));
 export function fitNow() {
-  if (!installed() || !clocksShown()) return;     // only the installed app
-  const mode = P.get("win-size");
-  if (mode === "mine") return;
-  if (mode === "fill") {
-    try { window.moveTo(screen.availLeft || 0, screen.availTop || 0); resizeTo(screen.availWidth, screen.availHeight); } catch {}
-    fitBoard(); return;
-  }
+  if (!matchMedia("(display-mode: standalone)").matches || !clocksShown()) return;     // only the installed app
   if (outerWidth >= screen.availWidth - 8 && outerHeight >= screen.availHeight - 8) { fitBoard(); return; }   // maximised: leave it
   fitBoard(true);
   // The title bar's height, measured only when no resize of ours is under way (sizes lag for a moment after one)
@@ -202,15 +193,10 @@ export function fitNow() {
   const h = frameH + $(".wrap").offsetHeight;
   if (Math.abs(h - outerHeight) > 1) { resizedAt = now(); try { resizeTo(outerWidth, h); } catch {} }
 }
-export function setWinSize(mode) {
-  P.set("win-size", mode);
-  if (mode !== "mine") fitWindow();
-  toast(mode === "fill" ? "The window will fill the screen" : mode === "fit" ? "The window will fit your projects" : "The window will stay the size you make it");
-}
 
 export function renderBoard() {
   const iv = intervals();
-  let h = `<div class="row head" style="--n:${MAIN.length}"><div class="hp">Project<button type="button" class="btn ghost addp" data-add="1" title="Create a new project">+ New</button>${installed() ? `<button type="button" class="btn icon winsz" data-menu="winsize|" aria-haspopup="menu" aria-label="Window size" title="Window size">${I.win}</button>` : ""}</div>${MAIN.map((a, i) => `<div class="ah" style="--c:var(--a${i % 7})">${esc(a.name)}</div>`).join("")}<div>Project total</div></div>`;
+  let h = `<div class="row head" style="--n:${MAIN.length}"><div class="hp">Project<button type="button" class="btn ghost addp" data-add="1" title="Create a new project">+ New</button></div>${MAIN.map((a, i) => `<div class="ah" style="--c:var(--a${i % 7})">${esc(a.name)}</div>`).join("")}<div>Project total</div></div>`;
   if (!openProjects().length) h += `<div class="empty">${S.projects.length ? "All your projects are closed. Click <b>+ New</b> to create one." : "Click <b>+ New</b> to create your first project, then click any clock to start tracking."}</div>`;
   for (const p of boardProjects()) {
     const mine = iv.filter(x => x.p === p.id);

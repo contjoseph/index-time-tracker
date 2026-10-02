@@ -1,5 +1,5 @@
 // Lets the tracker open offline and be installed as an app.
-const CACHE = "itt-v24";
+const CACHE = "itt-v25";
 const FILES = ["./", "index.html", "style.css", "manifest.webmanifest", "icon.svg",
   "js/main.js", "js/core/time.js", "js/core/zones.js", "js/data/prefs.js", "js/data/schema.js",
   "js/data/store.js", "js/domain/activities.js", "js/domain/board.js", "js/domain/breaks.js", "js/domain/invoice.js", "js/domain/report.js", "js/domain/schedule.js",

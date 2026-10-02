@@ -62,7 +62,9 @@ export function renderSchedule() {
 
   // The grid: a corner, 7 day headings, then one row per half hour. Each block shows its times in its first
   // visible slot. A slot where a clock ran gets a thin line (--ws/--we trim it to the part that was worked).
-  // Time that has passed gets a faint veil: whole slots before now, and the current slot down to the minute (--pf).
+  // Each planned block is one rounded shape (.pb in each slot; .bt/.bb round its top and bottom).
+  // Time that has passed is hatched: whole slots before now, and the current slot down to the minute (--pf),
+  // where a line marks now and the hours column shows the time.
   const did = future ? [] : workedStretches(a, Math.min(end, t)), focus = sch.focus || `0-${from * 60}`;
   const labels = {};
   DAYS.forEach((_, d) => schBlocks(set, d).forEach(([s, e]) => { const at = Math.max(s, from * 60); if (at < e && at < to * 60) labels[`${d}-${at}`] = shortRange([s, e]); }));
@@ -72,14 +74,16 @@ export function renderSchedule() {
   }).join("");
   for (let m = from * 60; m < to * 60; m += SLOT) {
     const half = m % 60 ? " half" : "";
-    h += `<div class="hr${half}">${half ? "" : slotTime(m)}</div>` + DAYS.map((n, d) => {
+    const nd = DAYS.findIndex((_, d) => { const s = vts(mon, d, m, tz); return s < t && t < s + SLOTMS; });
+    const nm = nd < 0 ? 0 : m + Math.floor((t - vts(mon, nd, m, tz)) / 60000);
+    h += `<div class="hr${half}${nd < 0 ? "" : ` now" style="--pf:${((nm - m) / SLOT).toFixed(3)}`}">${half ? "" : slotTime(m)}${nd < 0 ? "" : `<span class="nowtag">${(Math.floor(nm / 60) + 11) % 12 + 1}:${String(nm % 60).padStart(2, "0")}</span>`}</div>` + DAYS.map((n, d) => {
       const k = `${d}-${m}`, on = set.has(k), s = vts(mon, d, m, tz), e = s + SLOTMS;
       const hit = did.filter(x => x[1] > s && x[0] < e);
       const st = [];
       if (hit.length) st.push(`--ws:${((Math.max(hit[0][0], s) - s) / SLOTMS).toFixed(3)};--we:${((e - Math.min(hit[hit.length - 1][1], e)) / SLOTMS).toFixed(3)}`);
       if (s < t && t < e) st.push(`--pf:${((t - s) / SLOTMS).toFixed(3)}`);
-      const cls = `${half}${on ? " on" : ""}${dayKey(schDay(mon, d)) === today ? " today" : ""}${e <= t ? " past" : s < t ? " now" : ""}${hit.length ? " w" : ""}`;
-      return `<div class="sc${cls}"${st.length ? ` style="${st.join(";")}"` : ""} data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}">${labels[k] ? `<span class="blab">${labels[k]}</span>` : ""}</div>`;
+      const cls = `${half}${on ? ` on${set.has(`${d}-${m - SLOT}`) ? "" : " bt"}${set.has(`${d}-${m + SLOT}`) ? "" : " bb"}` : ""}${e <= t ? " past" : s < t ? " now" : ""}${hit.length ? " w" : ""}`;
+      return `<div class="sc${cls}"${st.length ? ` style="${st.join(";")}"` : ""} data-k="${k}" role="gridcell" tabindex="${k === focus ? 0 : -1}" aria-selected="${on}" aria-label="${n} ${slotTime(m)}${on ? ", planned" : ""}${hit.length ? ", worked" : ""}">${on ? `<i class="pb"></i>` : ""}${labels[k] ? `<span class="blab">${labels[k]}</span>` : ""}</div>`;
     }).join("");
   }
   setHTML($("#schGrid"), h);
