@@ -3,10 +3,12 @@
   --danger:#B23A3A; --focus:#2E63B8; --brk:#C4581F; --ok:#2D8A6C;
   --a0:#3B6EA8; --a1:#7657A8; --a2:#2D8A6C; --a3:#A87A1E; --a4:#AE4A67; --a5:#4F7F8C; --a6:#8C5A3C;
   --note:#FFF6E8; --noteline:#F0D6AE; --edge:#000;          /* --edge: the raised edge under START BREAK */
-  /* Schedule: --plan the planned blocks (teal, kept apart from the running green), --plan-ink its text,
-     --veil the sand hatching over time that has passed */
-  --plan:#2B95A3; --plan-ink:#1D6E79;
-  --veil:repeating-linear-gradient(135deg,rgba(150,112,50,.34) 0 1.5px,rgba(176,140,80,.13) 1.5px 6px);
+  /* Schedule: --plan the planned blocks (teal, kept apart from the running green), --plan-fill their fill,
+     --plan-rim a light top edge (dark only), --plan-ink its text, --veil the fine sand hatching over time that
+     has passed, --now/--now-text the line and time tag at now (ink in light, amber in dark: "Lagoon and amber") */
+  --plan:#2B95A3; --plan-fill:color-mix(in srgb,#2B95A3 24%,#FFFFFF); --plan-rim:none; --plan-ink:#1D6E79;
+  --veil:repeating-linear-gradient(135deg,rgba(150,112,50,.16) 0 1px,rgba(176,140,80,.10) 1px 5px);
+  --now:#17202A; --now-text:#FFFFFF;
   --pad:20px;                                   /* one inner margin for every card */
   color-scheme:light;
 }
@@ -17,8 +19,9 @@
     --danger:#E07070; --focus:#7FA8EA; --brk:#E8854F; --ok:#5DBB99;
     --a0:#6F9BD6; --a1:#A58AD6; --a2:#5DBB99; --a3:#D4A64A; --a4:#D97A95; --a5:#7FB0BD; --a6:#C08A68;
     --note:#2A2419; --noteline:#4A3D26; --edge:#98A3AF;
-    --plan:#5BB8C6; --plan-ink:#86D3DE;
-    --veil:repeating-linear-gradient(135deg,rgba(205,170,110,.17) 0 1.5px,rgba(20,12,0,.40) 1.5px 6px);
+    --plan:#36C9BE; --plan-fill:color-mix(in srgb,#36C9BE 30%,#19212A); --plan-rim:inset 0 1px 0 rgba(120,240,225,.35); --plan-ink:#7FE7DC;
+    --veil:repeating-linear-gradient(135deg,rgba(245,205,140,.15) 0 1px,rgba(245,205,140,.035) 1px 5px);
+    --now:#FFC24D; --now-text:#2A1D00;
     color-scheme:dark;
   }
 }
@@ -27,8 +30,9 @@
   --danger:#E07070; --focus:#7FA8EA; --brk:#E8854F; --ok:#5DBB99;
   --a0:#6F9BD6; --a1:#A58AD6; --a2:#5DBB99; --a3:#D4A64A; --a4:#D97A95; --a5:#7FB0BD; --a6:#C08A68;
   --note:#2A2419; --noteline:#4A3D26; --edge:#98A3AF;
-    --plan:#5BB8C6; --plan-ink:#86D3DE;
-    --veil:repeating-linear-gradient(135deg,rgba(205,170,110,.17) 0 1.5px,rgba(20,12,0,.40) 1.5px 6px);
+    --plan:#36C9BE; --plan-fill:color-mix(in srgb,#36C9BE 30%,#19212A); --plan-rim:inset 0 1px 0 rgba(120,240,225,.35); --plan-ink:#7FE7DC;
+    --veil:repeating-linear-gradient(135deg,rgba(245,205,140,.15) 0 1px,rgba(245,205,140,.035) 1px 5px);
+    --now:#FFC24D; --now-text:#2A1D00;
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -393,22 +397,23 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
 .sgrid .sh b{display:block;font-weight:800}
 .sgrid .sh span{display:block;font-size:12.5px;color:var(--muted)}
 .sgrid .sh em{display:block;font-style:normal;font-size:12.5px;font-weight:800;color:var(--plan-ink);min-height:1.25em}
-.sgrid .sh.today b::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ink);margin-right:5px;vertical-align:2px}
+.sgrid .sh.today b::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--now);margin-right:5px;vertical-align:2px}
 .sgrid .hr{font-size:12px;font-weight:600;color:var(--muted);text-align:right;padding:2px 8px 0 0;border-top:1px solid var(--line);height:22px;line-height:1;position:relative}
-.sgrid .hr .nowtag{position:absolute;right:4px;top:calc(var(--pf,0) * 100% - 9px);background:var(--ink);color:var(--surface);font-size:11px;font-weight:800;line-height:1.3;border-radius:5px;padding:1px 5px;z-index:3;pointer-events:none}
+.sgrid .hr .nowtag{position:absolute;right:4px;top:calc(var(--pf,0) * 100% - 9px);background:var(--now);color:var(--now-text);font-size:11px;font-weight:800;line-height:1.3;border-radius:5px;padding:1px 5px;z-index:3;pointer-events:none}
 .sgrid .sc{border-top:1px solid var(--line);border-left:1px solid var(--line);height:22px;cursor:pointer;position:relative}
 /* where a clock ran: a thin line down the right of the slot, trimmed to the part of the half hour worked */
 .sgrid .sc.w::after{z-index:2;content:"";position:absolute;right:5px;width:5px;top:calc(var(--ws,0) * 100% - 1px);bottom:calc(var(--we,0) * 100%);background:var(--ink);box-shadow:-1.5px 0 0 var(--surface),1.5px 0 0 var(--surface);pointer-events:none}
 /* time that has passed: sand hatching, and in the current half hour down to the minute, with a line at now */
 .sgrid .sc.past::before,.sgrid .sc.now::before{content:"";position:absolute;inset:-1px 0 0;background:var(--veil);background-attachment:fixed;pointer-events:none;z-index:1}   /* fixed: the hatching runs on unbroken from slot to slot */
-.sgrid .sc.now::before{bottom:auto;height:calc(var(--pf,0) * 100% + 1px);box-shadow:0 2px 0 var(--ink)}
+.sgrid .sc.now::before{bottom:auto;height:calc(var(--pf,0) * 100% + 1px);box-shadow:0 2px 0 var(--now)}
 .sgrid .sh.past b,.sgrid .sh.past span,.sgrid .sh.past em{opacity:.55}
 .sgrid .half{border-top-style:dashed}
 .sgrid .hr.half{border-top-color:transparent}
 .sgrid .sc:hover{background:var(--soft)}
 /* planned: one soft, rounded block per stretch of time (.pb in each slot; .bt and .bb round its ends) */
-.sgrid .pb{position:absolute;left:3px;right:3px;top:-1px;bottom:0;background:color-mix(in srgb,var(--plan) 24%,var(--surface));pointer-events:none}
-.sgrid .bt .pb{top:2px;border-radius:7px 7px 0 0}
+.sgrid .pb{position:absolute;left:3px;right:3px;top:-1px;bottom:0;background:var(--plan-fill);pointer-events:none}
+.sgrid .sc:not(.bb) .pb{bottom:-1px}   /* slots overlap by 1px, so a block shows no seams between half hours */
+.sgrid .bt .pb{top:2px;border-radius:7px 7px 0 0;box-shadow:var(--plan-rim)}
 .sgrid .bb .pb{bottom:2px;border-radius:0 0 7px 7px}
 .sgrid .bt.bb .pb{border-radius:7px}
 .sgrid .sc.add{background:color-mix(in srgb,var(--plan) 38%,var(--surface))}
@@ -418,7 +423,7 @@ table.invlines tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var
 .sgrid .sc:focus-visible{outline-offset:-2px}
 .sched .rnote{border-top:1px solid var(--line)}
 .slegend{padding-bottom:10px}
-.sk{display:inline-block;flex:none;width:16px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--plan) 24%,var(--surface))}
+.sk{display:inline-block;flex:none;width:16px;height:12px;border-radius:4px;background:var(--plan-fill)}
 .sk.gone{background:var(--veil);outline:1px solid var(--line);border-radius:2px}
 .sk.did{width:5px;height:14px;border-radius:0;background:var(--ink)}
 .scopy{padding:12px var(--pad) 4px;border-top:1px solid var(--line);font-size:15px;line-height:1.75}

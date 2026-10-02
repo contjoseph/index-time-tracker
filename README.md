@@ -133,7 +133,7 @@ These are **switched off unless you turn them on** in the **Extras** card at the
 - Step through weeks with **‹ ›**. **Show … to …** picks which hours the grid shows.
 - The three boxes compare your plan with the time your clocks tracked: **Planned**, **Worked**, and how far ahead or behind you are.
 - A thin dark line on the grid shows where your clocks actually ran, next to what you planned.
-- Planned time shows as soft teal blocks with rounded corners. Time that has passed is covered with light sand-coloured stripes, right down to the current minute today, where a dark line and the time in the hours column mark *now*. So at a glance you see what's done and what's next.
+- Planned time shows as soft teal blocks with rounded corners. Time that has passed is covered with fine, faint sand-coloured stripes, right down to the current minute today, where a line and the time in the hours column mark *now* (dark in light mode, amber in dark mode). So at a glance you see what's done and what's next.
 - **Same as last week** copies last week's plan. If this week already has a plan, it asks with a second click first.
 - **Copy schedule** copies the week, **always in Kevin's time (Eastern)**, with a first line like "Eastern time (EDT)". Everything else in the tracker stays in your time. Under **What gets copied**, pick the format; the choice is remembered:
   - **Full:** one line per day, like "Monday → 9 AM to 1 PM, 2 PM to 5 PM", which pastes into two spreadsheet columns.
